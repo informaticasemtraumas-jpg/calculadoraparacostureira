@@ -11,6 +11,7 @@ Aplicação web simples para ajudar costureiras a calcular o aproveitamento de t
 - Oferece botões com larguras comuns de tecido.
 - Calcula custo por metro linear, custo por peça e custo estimado da produção quando o preço do tecido é informado.
 - Gera um resumo do cálculo e permite copiar o texto.
+- Exibe uma visualização gráfica simples do encaixe das peças no tecido.
 - Possui layout responsivo para desktop e celular.
 
 ## Como abrir o projeto
@@ -34,6 +35,14 @@ Depois acesse:
 
 ```text
 http://localhost:8000
+```
+
+## Como testar
+
+Rode os testes unitários da lógica de cálculo com:
+
+```bash
+npm test
 ```
 
 ## Como usar
@@ -72,13 +81,17 @@ Com esses dados, a calculadora estima o preço por metro linear e usa esse valor
 
 ```text
 .
+├── calculator.js
 ├── index.html
+├── package.json
 ├── README.md
 ├── script.js
-└── style.css
+├── style.css
+└── test/
+    └── calculator.test.js
 ```
 
-O arquivo `index.html` contém a estrutura da página, `style.css` concentra os estilos visuais e `script.js` concentra a lógica da calculadora.
+O arquivo `index.html` contém a estrutura da página, `style.css` concentra os estilos visuais, `script.js` controla a interface e `calculator.js` concentra a lógica de cálculo testável.
 
 ## Regras gerais do cálculo
 
@@ -91,8 +104,6 @@ O arquivo `index.html` contém a estrutura da página, `style.css` concentra os 
 ## Próximos passos sugeridos
 
 - Melhorar a fórmula de espaçamento para descontar o espaço após a última peça da linha ou última fileira.
-- Adicionar testes automatizados para a lógica de cálculo.
-- Adicionar uma visualização gráfica do encaixe das peças no tecido.
 - Melhorar a validação de valores monetários com formato brasileiro.
 
 ## Licença

@@ -8,6 +8,7 @@ const fabricLengthGroup = document.querySelector('#fabricLengthGroup');
 const resultsEl = document.querySelector('#results');
 const alertsEl = document.querySelector('#alerts');
 const summaryEl = document.querySelector('#summary');
+const previewEl = document.querySelector('#layoutPreview');
 const copyButton = document.querySelector('#copyButton');
 const clearButton = document.querySelector('#clearButton');
 
@@ -48,121 +49,10 @@ function getInputs() {
   };
 }
 
-function getFinalPieceSize(width, length, margin) {
-  return {
-    finalWidth: width + margin * 2,
-    finalLength: length + margin * 2
-  };
-}
-
-function calculateFitCount(availableLength, itemLength, spacing) {
-  if (availableLength < itemLength) return 0;
-  return Math.floor((availableLength + spacing) / (itemLength + spacing));
-}
-
-function calculateOccupiedLength(itemCount, itemLength, spacing) {
-  if (itemCount <= 0) return 0;
-  return itemCount * itemLength + (itemCount - 1) * spacing;
-}
-
-function calculatePricePerMeter(input) {
-  if (input.fabricPrice <= 0 || input.boughtLength <= 0) return 0;
-  return input.fabricPrice / (input.boughtLength / 100);
-}
-
-function calculateOrientation(input, rotated) {
-  const baseWidth = rotated ? input.pieceLength : input.pieceWidth;
-  const baseLength = rotated ? input.pieceWidth : input.pieceLength;
-  const size = getFinalPieceSize(baseWidth, baseLength, input.margin);
-  const piecesAcross = calculateFitCount(input.fabricWidth, size.finalWidth, input.spacing);
-  const rowsInLength = currentMode === 'have'
-    ? calculateFitCount(input.fabricLength, size.finalLength, input.spacing)
-    : 0;
-  const totalPieces = piecesAcross * rowsInLength;
-  const rowsNeeded = piecesAcross > 0 ? Math.ceil(input.desiredQuantity / piecesAcross) : 0;
-  const neededLength = calculateOccupiedLength(rowsNeeded, size.finalLength, input.spacing);
-
-  return {
-    rotated,
-    finalWidth: size.finalWidth,
-    finalLength: size.finalLength,
-    piecesAcross,
-    rowsInLength,
-    totalPieces,
-    rowsNeeded,
-    neededLength
-  };
-}
-
-function chooseBestOrientation(input) {
-  const normal = calculateOrientation(input, false);
-  if (!input.allowRotate) return normal;
-
-  const rotated = calculateOrientation(input, true);
-
-  if (currentMode === 'have') {
-    if (rotated.totalPieces > normal.totalPieces) return rotated;
-    return normal;
-  }
-
-  if (normal.piecesAcross <= 0 && rotated.piecesAcross > 0) return rotated;
-  if (rotated.piecesAcross <= 0 && normal.piecesAcross > 0) return normal;
-  if (rotated.neededLength > 0 && rotated.neededLength < normal.neededLength) return rotated;
-  return normal;
-}
-
-function calculateHaveFabric(input) {
-  const best = chooseBestOrientation(input);
-  const pricePerMeter = calculatePricePerMeter(input);
-  const usedLength = calculateOccupiedLength(best.rowsInLength, best.finalLength, input.spacing);
-  const remainingLength = input.fabricLength - usedLength;
-  const costPerPiece = pricePerMeter > 0 && best.totalPieces > 0
-    ? pricePerMeter * ((usedLength / Math.max(best.totalPieces, 1)) / 100)
-    : 0;
-
-  const alerts = [];
-  if (best.piecesAcross <= 0) {
-    alerts.push({ type: 'danger', text: 'Essa peça não cabe na largura informada do tecido. Tente girar a peça ou escolher um tecido mais largo.' });
-  } else if (best.totalPieces <= 0) {
-    alerts.push({ type: 'danger', text: 'Nenhuma peça cabe com essas medidas. Verifique a largura do tecido, a margem e o espaçamento.' });
-  } else {
-    alerts.push({ type: 'success', text: `Melhor encaixe encontrado: peça ${best.rotated ? 'girada' : 'na posição normal'}.` });
-  }
-
-  return {
-    ...best,
-    pricePerMeter,
-    usedLength,
-    remainingLength,
-    costPerPiece,
-    alerts
-  };
-}
-
-function calculateBuyFabric(input) {
-  const best = chooseBestOrientation(input);
-  const pricePerMeter = calculatePricePerMeter(input);
-  const lengthPerPiece = best.neededLength / input.desiredQuantity;
-  const costPerPiece = pricePerMeter > 0 ? pricePerMeter * (lengthPerPiece / 100) : 0;
-  const totalCost = costPerPiece * input.desiredQuantity;
-
-  const alerts = [];
-  if (best.piecesAcross <= 0) {
-    alerts.push({ type: 'danger', text: 'Essa peça não cabe na largura informada do tecido. Tente girar a peça ou escolher um tecido mais largo.' });
-  } else {
-    alerts.push({ type: 'success', text: `Melhor encaixe encontrado: peça ${best.rotated ? 'girada' : 'na posição normal'}.` });
-  }
-
-  return {
-    ...best,
-    pricePerMeter,
-    lengthPerPiece,
-    costPerPiece,
-    totalCost,
-    alerts
-  };
-}
-
+const {
+  calculateHaveFabric,
+  calculateBuyFabric
+} = Calculator;
 function renderResultItem(value, label) {
   return `
     <div class="result-item">
@@ -176,6 +66,36 @@ function renderAlerts(alerts) {
   alertsEl.innerHTML = alerts.map(alert => `
     <div class="alert ${alert.type}">${alert.text}</div>
   `).join('');
+}
+
+
+function renderLayoutPreview(input, result) {
+  if (result.piecesAcross <= 0) {
+    previewEl.innerHTML = '';
+    return;
+  }
+
+  const rows = currentMode === 'have' ? result.rowsInLength : result.rowsNeeded;
+  const totalPieces = currentMode === 'have' ? result.totalPieces : input.desiredQuantity;
+  const maxPreviewPieces = 180;
+  const piecesToRender = Math.min(totalPieces, maxPreviewPieces);
+  const omittedPieces = totalPieces - piecesToRender;
+
+  let pieces = '';
+  for (let index = 0; index < piecesToRender; index += 1) {
+    pieces += `<span class="preview-piece" title="Peça ${index + 1}">${index + 1}</span>`;
+  }
+
+  previewEl.innerHTML = `
+    <div class="layout-preview">
+      <h3>Visualização do encaixe</h3>
+      <p>${result.piecesAcross} peça(s) por faixa em ${rows} fileira(s).</p>
+      <div class="fabric-preview" style="--pieces-across: ${result.piecesAcross};">
+        ${pieces}
+      </div>
+      ${omittedPieces > 0 ? `<p class="preview-note">+ ${omittedPieces} peça(s) não exibidas para manter a visualização leve.</p>` : ''}
+    </div>
+  `;
 }
 
 function renderHaveResults(input, result) {
@@ -260,6 +180,7 @@ function calculate() {
   if (errors.length > 0) {
     renderAlerts(errors.map(text => ({ type: 'danger', text })));
     resultsEl.innerHTML = '';
+    previewEl.innerHTML = '';
     summaryEl.textContent = 'Corrija as medidas para calcular.';
     copyButton.classList.add('hidden');
     return;
@@ -269,10 +190,12 @@ function calculate() {
     const result = calculateHaveFabric(input);
     renderAlerts(result.alerts);
     renderHaveResults(input, result);
+    renderLayoutPreview(input, result);
   } else {
     const result = calculateBuyFabric(input);
     renderAlerts(result.alerts);
     renderBuyResults(input, result);
+    renderLayoutPreview(input, result);
   }
 
   summaryEl.textContent = lastSummary;
