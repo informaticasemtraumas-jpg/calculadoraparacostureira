@@ -73,22 +73,23 @@ Com esses dados, a calculadora estima o preço por metro linear e usa esse valor
 ```text
 .
 ├── index.html
-└── README.md
+├── README.md
+├── script.js
+└── style.css
 ```
 
-No momento, todo o HTML, CSS e JavaScript estão concentrados em `index.html` para manter o projeto simples.
+O arquivo `index.html` contém a estrutura da página, `style.css` concentra os estilos visuais e `script.js` concentra a lógica da calculadora.
 
 ## Regras gerais do cálculo
 
 - Todas as medidas devem ser informadas em centímetros.
 - O cálculo principal considera cortes retangulares organizados em linhas e colunas.
 - A margem de costura é aplicada nos dois lados da largura e nos dois lados do comprimento da peça.
-- O espaçamento informado é somado ao tamanho considerado da peça para reservar área entre cortes.
+- O espaçamento informado é aplicado somente entre peças e entre fileiras, sem adicionar espaço extra após a última peça da linha ou a última fileira.
 - Quando a opção de rotação está ativa, a calculadora compara a peça em posição normal e girada, escolhendo o melhor aproveitamento encontrado.
 
 ## Próximos passos sugeridos
 
-- Separar CSS e JavaScript em arquivos próprios.
 - Melhorar a fórmula de espaçamento para descontar o espaço após a última peça da linha ou última fileira.
 - Adicionar testes automatizados para a lógica de cálculo.
 - Adicionar uma visualização gráfica do encaixe das peças no tecido.
