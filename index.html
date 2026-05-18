@@ -91,14 +91,20 @@
             <h2>Custo do tecido opcional</h2>
             <div class="grid">
               <div>
+                <label for="pricePerMeter">Preço por metro linear em R$</label>
+                <input id="pricePerMeter" type="text" inputmode="decimal" placeholder="Ex: 22,50" />
+                <p class="help">Se você já sabe o preço por metro, preencha aqui.</p>
+              </div>
+
+              <div>
                 <label for="fabricPrice">Preço pago pelo tecido em R$</label>
-                <input id="fabricPrice" type="number" min="0" step="0.01" placeholder="Ex: 45,00" />
+                <input id="fabricPrice" type="text" inputmode="decimal" placeholder="Ex: 45,00" />
               </div>
 
               <div>
                 <label for="boughtLength">Comprimento comprado em cm</label>
                 <input id="boughtLength" type="number" min="0" step="0.1" placeholder="Ex: 200" />
-                <p class="help">Use este campo para descobrir o preço por metro linear.</p>
+                <p class="help">Se não preencher o preço por metro, usamos estes dois campos para calcular.</p>
               </div>
             </div>
           </div>
@@ -113,8 +119,10 @@
       <aside class="card">
         <h2 class="result-title">Resultado</h2>
         <div id="alerts"></div>
+        <div class="result-lead" id="resultLead"></div>
         <div class="result-grid" id="results"></div>
         <div id="layoutPreview"></div>
+        <div id="widthComparison"></div>
         <button class="secondary-btn hidden" type="button" id="copyButton" style="margin-top: 14px; width: 100%;">
           Copiar resumo
         </button>

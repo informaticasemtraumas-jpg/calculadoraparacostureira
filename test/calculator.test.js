@@ -57,3 +57,43 @@ test('calculatePricePerMeter ignores incomplete price data', () => {
   assert.equal(Calculator.calculatePricePerMeter({ fabricPrice: 45, boughtLength: 0 }), 0);
   assert.equal(Calculator.calculatePricePerMeter({ fabricPrice: 45, boughtLength: 150 }), 30);
 });
+
+test('calculateBuyFabric suggests purchase rounded up to 10 cm', () => {
+  const result = Calculator.calculateBuyFabric({
+    ...baseInput,
+    fabricWidth: 150,
+    pieceWidth: 20,
+    pieceLength: 30,
+    margin: 1,
+    spacing: 1,
+    desiredQuantity: 50
+  });
+
+  assert.equal(result.neededLength, 296);
+  assert.equal(result.suggestedLength, 300);
+});
+
+test('calculatePricePerMeter prioritizes direct meter price', () => {
+  assert.equal(Calculator.calculatePricePerMeter({
+    pricePerMeter: 22.5,
+    fabricPrice: 45,
+    boughtLength: 200
+  }), 22.5);
+});
+
+test('compareFabricWidths marks best option and not-fitting widths', () => {
+  const result = Calculator.compareFabricWidths({
+    ...baseInput,
+    pieceWidth: 130,
+    pieceLength: 20,
+    desiredQuantity: 10,
+    spacing: 0,
+    allowRotate: false
+  }, [120, 140, 300]);
+
+  assert.equal(result[0].fits, false);
+  assert.equal(result[0].piecesAcross, 0);
+  assert.equal(result[1].fits, true);
+  assert.equal(result[2].fits, true);
+  assert.equal(result[2].isBest, true);
+});
