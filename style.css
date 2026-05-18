@@ -354,3 +354,107 @@ footer {
 .preview-note {
   margin-top: 10px !important;
 }
+
+.result-lead {
+  background: #fff4ef;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  color: var(--text);
+  font-size: 18px;
+  line-height: 1.45;
+  margin-bottom: 12px;
+  padding: 14px;
+}
+
+.result-lead:empty {
+  display: none;
+}
+
+.result-lead strong {
+  color: var(--primary-dark);
+}
+
+.width-comparison {
+  background: #fffaf7;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  margin-top: 14px;
+  padding: 14px;
+}
+
+.width-comparison h3 {
+  color: var(--primary-dark);
+  font-size: 17px;
+  margin: 0 0 6px;
+}
+
+.width-comparison p {
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.4;
+  margin: 0 0 12px;
+}
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+.width-comparison table {
+  border-collapse: collapse;
+  min-width: 560px;
+  width: 100%;
+}
+
+.width-comparison th,
+.width-comparison td {
+  border-bottom: 1px solid var(--border);
+  padding: 10px 8px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.width-comparison th {
+  color: var(--primary-dark);
+  font-size: 13px;
+}
+
+.width-comparison td {
+  color: var(--text);
+  font-size: 14px;
+}
+
+.width-comparison tr.best-option {
+  background: #edfdf4;
+}
+
+.best-badge {
+  background: var(--success);
+  border-radius: 999px;
+  color: #fff;
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 800;
+  margin-top: 6px;
+  padding: 4px 8px;
+}
+
+@media (max-width: 560px) {
+  .result-lead {
+    font-size: 16px;
+  }
+
+  .fabric-preview {
+    grid-template-columns: repeat(var(--pieces-across), minmax(18px, 1fr));
+  }
+
+  .preview-piece {
+    font-size: 10px;
+    min-height: 24px;
+  }
+}
+
+.buy-suggestion {
+  color: var(--muted);
+  font-size: 15px;
+  margin: 8px 0 0;
+}

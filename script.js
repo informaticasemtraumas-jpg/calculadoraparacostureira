@@ -1,14 +1,18 @@
 let currentMode = 'have';
 let lastSummary = '';
 
+const comparisonWidths = [115, 120, 140, 150, 160, 180, 250, 300];
+
 const tabs = document.querySelectorAll('.tab');
 const form = document.querySelector('#calculatorForm');
 const quantityGroup = document.querySelector('#quantityGroup');
 const fabricLengthGroup = document.querySelector('#fabricLengthGroup');
+const resultLeadEl = document.querySelector('#resultLead');
 const resultsEl = document.querySelector('#results');
 const alertsEl = document.querySelector('#alerts');
 const summaryEl = document.querySelector('#summary');
 const previewEl = document.querySelector('#layoutPreview');
+const comparisonEl = document.querySelector('#widthComparison');
 const copyButton = document.querySelector('#copyButton');
 const clearButton = document.querySelector('#clearButton');
 
@@ -17,17 +21,41 @@ const moneyFormatter = new Intl.NumberFormat('pt-BR', {
   currency: 'BRL'
 });
 
+const decimalFormatter = new Intl.NumberFormat('pt-BR', {
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 2
+});
+
+const meterFormatter = new Intl.NumberFormat('pt-BR', {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2
+});
+
 function getNumber(id) {
-  const value = Number(document.querySelector(id).value.replace?.(',', '.') || document.querySelector(id).value);
+  const element = document.querySelector(id);
+  const normalizedValue = element.value.replace?.(',', '.') || element.value;
+  const value = Number(normalizedValue);
   return Number.isFinite(value) ? value : 0;
 }
 
 function formatCm(value) {
-  return `${round(value)} cm`;
+  return `${decimalFormatter.format(round(value))} cm`;
 }
 
 function formatMeters(valueCm) {
-  return `${round(valueCm / 100)} m`;
+  return `${meterFormatter.format(round(valueCm / 100))} m`;
+}
+
+function formatPieceMeasure(width, length) {
+  return `${decimalFormatter.format(round(width))} x ${decimalFormatter.format(round(length))} cm`;
+}
+
+function formatSuggestedLength(valueCm) {
+  return valueCm < 100 ? formatCm(valueCm) : formatMeters(valueCm);
+}
+
+function formatSuggestedLengthDetail(valueCm) {
+  return valueCm < 100 ? formatCm(valueCm) : `${formatCm(valueCm)} / ${formatMeters(valueCm)}`;
 }
 
 function round(value) {
@@ -43,6 +71,7 @@ function getInputs() {
     margin: getNumber('#margin'),
     spacing: getNumber('#spacing'),
     desiredQuantity: Math.max(1, Math.floor(getNumber('#desiredQuantity'))),
+    pricePerMeter: getNumber('#pricePerMeter'),
     fabricPrice: getNumber('#fabricPrice'),
     boughtLength: getNumber('#boughtLength'),
     allowRotate: document.querySelector('#allowRotate').checked
@@ -51,8 +80,10 @@ function getInputs() {
 
 const {
   calculateHaveFabric,
-  calculateBuyFabric
+  calculateBuyFabric,
+  compareFabricWidths
 } = Calculator;
+
 function renderResultItem(value, label) {
   return `
     <div class="result-item">
@@ -68,7 +99,6 @@ function renderAlerts(alerts) {
   `).join('');
 }
 
-
 function renderLayoutPreview(input, result) {
   if (result.piecesAcross <= 0) {
     previewEl.innerHTML = '';
@@ -77,7 +107,7 @@ function renderLayoutPreview(input, result) {
 
   const rows = currentMode === 'have' ? result.rowsInLength : result.rowsNeeded;
   const totalPieces = currentMode === 'have' ? result.totalPieces : input.desiredQuantity;
-  const maxPreviewPieces = 180;
+  const maxPreviewPieces = 60;
   const piecesToRender = Math.min(totalPieces, maxPreviewPieces);
   const omittedPieces = totalPieces - piecesToRender;
 
@@ -88,20 +118,79 @@ function renderLayoutPreview(input, result) {
 
   previewEl.innerHTML = `
     <div class="layout-preview">
-      <h3>Visualização do encaixe</h3>
+      <h3>Visualização aproximada do encaixe</h3>
       <p>${result.piecesAcross} peça(s) por faixa em ${rows} fileira(s).</p>
+      ${result.rotated ? '<p>Visualização com a peça girada.</p>' : ''}
       <div class="fabric-preview" style="--pieces-across: ${result.piecesAcross};">
         ${pieces}
       </div>
-      ${omittedPieces > 0 ? `<p class="preview-note">+ ${omittedPieces} peça(s) não exibidas para manter a visualização leve.</p>` : ''}
+      ${omittedPieces > 0 ? `<p class="preview-note">+ ${omittedPieces} peça(s) não exibidas para manter a visualização simples.</p>` : ''}
     </div>
   `;
 }
 
+function renderWidthComparison(input) {
+  const comparisons = compareFabricWidths(input, comparisonWidths);
+  const rows = comparisons.map(item => {
+    if (!item.fits) {
+      return `
+        <tr>
+          <td>${formatCm(item.width)}</td>
+          <td colspan="4">Não cabe</td>
+        </tr>
+      `;
+    }
+
+    return `
+      <tr class="${item.isBest ? 'best-option' : ''}">
+        <td>${formatCm(item.width)}</td>
+        <td>${item.piecesAcross}</td>
+        <td>${item.rowsNeeded}</td>
+        <td>${formatMeters(item.neededLength)}</td>
+        <td>
+          ${formatSuggestedLength(item.suggestedLength)}
+          ${item.isBest ? '<span class="best-badge">Melhor aproveitamento</span>' : ''}
+        </td>
+      </tr>
+    `;
+  }).join('');
+
+  comparisonEl.innerHTML = `
+    <section class="width-comparison">
+      <h3>Comparar larguras de tecido</h3>
+      <p>Veja qual largura pode render melhor para esta compra.</p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Largura</th>
+              <th>Peças por faixa</th>
+              <th>Fileiras</th>
+              <th>Necessário</th>
+              <th>Sugestão</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    </section>
+  `;
+}
+
 function renderHaveResults(input, result) {
+  if (result.piecesAcross <= 0 || result.totalPieces <= 0) {
+    resultLeadEl.textContent = 'Com essas medidas, essa peça não cabe neste tecido. Tente girar a peça ou ajustar as medidas.';
+    resultsEl.innerHTML = '';
+    comparisonEl.innerHTML = '';
+    lastSummary = `✂️ Resumo do corte\n\nEssa peça não coube no tecido informado. Tente girar a peça ou conferir as medidas.\n`;
+    return;
+  }
+
+  resultLeadEl.innerHTML = `Com essas medidas, cabem <strong>${result.totalPieces} peça(s)</strong> neste tecido.`;
+
   const costItems = result.pricePerMeter > 0 ? [
     renderResultItem(moneyFormatter.format(result.pricePerMeter), 'Custo por metro linear'),
-    renderResultItem(moneyFormatter.format(result.costPerPiece), 'Custo estimado por peça')
+    renderResultItem(moneyFormatter.format(result.costPerPiece), 'Custo por peça')
   ].join('') : '';
 
   resultsEl.innerHTML = [
@@ -109,51 +198,66 @@ function renderHaveResults(input, result) {
     renderResultItem(result.piecesAcross, 'Peças por faixa/largura'),
     renderResultItem(result.rowsInLength, 'Fileiras no comprimento'),
     renderResultItem(formatCm(result.usedLength), 'Comprimento usado'),
-    renderResultItem(formatCm(Math.max(result.remainingLength, 0)), 'Comprimento restante'),
+    renderResultItem(formatCm(Math.max(result.remainingLength, 0)), 'Sobra de tecido'),
     costItems
   ].join('');
 
-  lastSummary = `Resumo do corte\n\n` +
-    `Largura do tecido: ${formatCm(input.fabricWidth)}\n` +
+  comparisonEl.innerHTML = '';
+
+  lastSummary = `✂️ Resumo do corte\n\n` +
+    `Tecido: ${formatCm(input.fabricWidth)} de largura\n` +
     `Comprimento disponível: ${formatCm(input.fabricLength)}\n` +
-    `Medida da peça: ${formatCm(input.pieceWidth)} x ${formatCm(input.pieceLength)}\n` +
+    `Peça: ${formatPieceMeasure(input.pieceWidth, input.pieceLength)}\n` +
     `Margem: ${formatCm(input.margin)}\n` +
-    `Espaçamento: ${formatCm(input.spacing)}\n` +
-    `Posição usada: ${result.rotated ? 'peça girada' : 'peça normal'}\n\n` +
+    `Espaço entre peças: ${formatCm(input.spacing)}\n` +
+    `Encaixe: ${result.rotated ? 'peça girada' : 'peça normal'}\n\n` +
     `Resultado:\n` +
     `Cabem ${result.totalPieces} peças no tecido.\n` +
     `Peças por faixa: ${result.piecesAcross}\n` +
     `Fileiras: ${result.rowsInLength}\n` +
-    `Comprimento usado: ${formatCm(result.usedLength)} (${formatMeters(result.usedLength)})\n` +
-    `Sobra de tecido: ${formatCm(Math.max(result.remainingLength, 0))}\n` +
-    (result.pricePerMeter > 0 ? `Custo estimado por peça: ${moneyFormatter.format(result.costPerPiece)}\n` : '');
+    `Comprimento usado: ${formatCm(result.usedLength)}\n` +
+    `Sobra: ${formatCm(Math.max(result.remainingLength, 0))}\n` +
+    (result.pricePerMeter > 0 ? `Custo por peça: ${moneyFormatter.format(result.costPerPiece)}\n` : '');
 }
 
 function renderBuyResults(input, result) {
+  if (result.piecesAcross <= 0) {
+    resultLeadEl.textContent = 'Nesta largura de tecido, essa peça não cabe. Veja abaixo se outra largura funciona melhor.';
+    resultsEl.innerHTML = '';
+    renderWidthComparison(input);
+    lastSummary = `🧵 Resumo da compra\n\nEssa peça não coube na largura de ${formatCm(input.fabricWidth)}. Tente girar a peça ou comparar com tecidos mais largos.\n`;
+    return;
+  }
+
+  resultLeadEl.innerHTML = `Para fazer <strong>${input.desiredQuantity} peça(s)</strong>, você precisa comprar aproximadamente <strong>${formatMeters(result.neededLength)}</strong> de tecido.<p class="buy-suggestion">Sugestão para comprar com segurança: <strong>${formatSuggestedLength(result.suggestedLength)}</strong>.</p>`;
+
   const costItems = result.pricePerMeter > 0 ? [
     renderResultItem(moneyFormatter.format(result.pricePerMeter), 'Custo por metro linear'),
-    renderResultItem(moneyFormatter.format(result.costPerPiece), 'Custo estimado por peça'),
+    renderResultItem(moneyFormatter.format(result.costPerPiece), 'Custo por peça'),
     renderResultItem(moneyFormatter.format(result.totalCost), 'Custo estimado da produção')
   ].join('') : '';
 
   resultsEl.innerHTML = [
     renderResultItem(formatCm(result.neededLength), 'Comprimento necessário'),
     renderResultItem(formatMeters(result.neededLength), 'Comprar em metros'),
+    renderResultItem(formatSuggestedLengthDetail(result.suggestedLength), 'Sugestão para comprar com segurança'),
     renderResultItem(result.piecesAcross, 'Peças por faixa/largura'),
     renderResultItem(result.rowsNeeded, 'Fileiras necessárias'),
     costItems
   ].join('');
 
-  lastSummary = `Resumo da compra\n\n` +
-    `Largura do tecido: ${formatCm(input.fabricWidth)}\n` +
-    `Medida da peça: ${formatCm(input.pieceWidth)} x ${formatCm(input.pieceLength)}\n` +
+  renderWidthComparison(input);
+
+  lastSummary = `🧵 Resumo da compra\n\n` +
+    `Tecido: ${formatCm(input.fabricWidth)} de largura\n` +
+    `Peça: ${formatPieceMeasure(input.pieceWidth, input.pieceLength)}\n` +
     `Quantidade desejada: ${input.desiredQuantity} peças\n` +
     `Margem: ${formatCm(input.margin)}\n` +
-    `Espaçamento: ${formatCm(input.spacing)}\n` +
-    `Posição usada: ${result.rotated ? 'peça girada' : 'peça normal'}\n\n` +
+    `Espaço entre peças: ${formatCm(input.spacing)}\n` +
+    `Encaixe: ${result.rotated ? 'peça girada' : 'peça normal'}\n\n` +
     `Resultado:\n` +
-    `Você precisa comprar aproximadamente ${formatMeters(result.neededLength)} de tecido.\n` +
-    `Comprimento em cm: ${formatCm(result.neededLength)}\n` +
+    `Você precisa de ${formatMeters(result.neededLength)} de tecido.\n` +
+    `Sugestão de compra: ${formatSuggestedLength(result.suggestedLength)}\n` +
     `Peças por faixa: ${result.piecesAcross}\n` +
     `Fileiras necessárias: ${result.rowsNeeded}\n` +
     (result.pricePerMeter > 0 ? `Custo estimado da produção: ${moneyFormatter.format(result.totalCost)}\n` : '');
@@ -173,16 +277,22 @@ function validateInputs(input) {
   return errors;
 }
 
+function clearRenderedResults(message) {
+  resultLeadEl.innerHTML = '';
+  resultsEl.innerHTML = '';
+  previewEl.innerHTML = '';
+  comparisonEl.innerHTML = '';
+  summaryEl.textContent = message;
+  copyButton.classList.add('hidden');
+}
+
 function calculate() {
   const input = getInputs();
   const errors = validateInputs(input);
 
   if (errors.length > 0) {
     renderAlerts(errors.map(text => ({ type: 'danger', text })));
-    resultsEl.innerHTML = '';
-    previewEl.innerHTML = '';
-    summaryEl.textContent = 'Corrija as medidas para calcular.';
-    copyButton.classList.add('hidden');
+    clearRenderedResults('Corrija as medidas para calcular.');
     return;
   }
 
@@ -239,6 +349,9 @@ clearButton.addEventListener('click', () => {
   document.querySelector('#margin').value = 1;
   document.querySelector('#spacing').value = 1;
   document.querySelector('#desiredQuantity').value = 50;
+  document.querySelector('#pricePerMeter').value = '';
+  document.querySelector('#fabricPrice').value = '';
+  document.querySelector('#boughtLength').value = '';
   document.querySelector('#allowRotate').checked = true;
   calculate();
 });

@@ -32,10 +32,12 @@ function createBrowserContext() {
     'calculatorForm',
     'quantityGroup',
     'fabricLengthGroup',
+    'resultLead',
     'results',
     'alerts',
     'summary',
     'layoutPreview',
+    'widthComparison',
     'copyButton',
     'clearButton',
     'fabricWidth',
@@ -45,6 +47,7 @@ function createBrowserContext() {
     'margin',
     'spacing',
     'desiredQuantity',
+    'pricePerMeter',
     'fabricPrice',
     'boughtLength',
     'allowRotate'
@@ -67,6 +70,7 @@ function createBrowserContext() {
   ];
 
   return vm.createContext({
+    __elements: elements,
     Intl,
     setTimeout,
     alert() {},
@@ -94,4 +98,21 @@ test('browser scripts load together without redeclaring calculator functions', (
     vm.runInContext(scriptSource, context, { filename: 'script.js' });
   });
   assert.equal(typeof context.Calculator.calculateHaveFabric, 'function');
+  assert.match(context.__elements.get('#resultLead').innerHTML, /Com essas medidas, cabem/);
+
+  context.__elements.get('#pricePerMeter').value = '20';
+  context.calculate();
+  assert.match(context.__elements.get('#results').innerHTML, /R\$\s*20,00/);
+
+  context.__elements.get('#pricePerMeter').value = '';
+  context.__elements.get('#fabricPrice').value = '45';
+  context.__elements.get('#boughtLength').value = '150';
+  context.calculate();
+  assert.match(context.__elements.get('#results').innerHTML, /R\$\s*30,00/);
+
+  context.setMode('buy');
+  assert.match(context.__elements.get('#resultLead').innerHTML, /Para fazer/);
+  assert.match(context.__elements.get('#results').innerHTML, /Sugestão para comprar com segurança/);
+  assert.match(context.__elements.get('#widthComparison').innerHTML, /Melhor aproveitamento/);
+  assert.match(context.__elements.get('#summary').textContent, /🧵 Resumo da compra/);
 });

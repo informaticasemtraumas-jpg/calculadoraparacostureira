@@ -27,8 +27,14 @@
   }
 
   function calculatePricePerMeter(input) {
+    if (input.pricePerMeter > 0) return input.pricePerMeter;
     if (input.fabricPrice <= 0 || input.boughtLength <= 0) return 0;
     return input.fabricPrice / (input.boughtLength / 100);
+  }
+
+  function roundUpPurchaseLength(neededLength) {
+    if (neededLength <= 0) return 0;
+    return Math.ceil(neededLength / 10) * 10;
   }
 
   function calculateOrientation(input, rotated, mode) {
@@ -42,6 +48,7 @@
     const totalPieces = piecesAcross * rowsInLength;
     const rowsNeeded = piecesAcross > 0 ? Math.ceil(input.desiredQuantity / piecesAcross) : 0;
     const neededLength = calculateOccupiedLength(rowsNeeded, size.finalLength, input.spacing);
+    const suggestedLength = roundUpPurchaseLength(neededLength);
 
     return {
       rotated,
@@ -51,7 +58,8 @@
       rowsInLength,
       totalPieces,
       rowsNeeded,
-      neededLength
+      neededLength,
+      suggestedLength
     };
   }
 
@@ -103,7 +111,7 @@
   function calculateBuyFabric(input) {
     const best = chooseBestOrientation(input, 'buy');
     const pricePerMeter = calculatePricePerMeter(input);
-    const lengthPerPiece = best.neededLength / input.desiredQuantity;
+    const lengthPerPiece = best.piecesAcross > 0 ? best.neededLength / input.desiredQuantity : 0;
     const costPerPiece = pricePerMeter > 0 ? pricePerMeter * (lengthPerPiece / 100) : 0;
     const totalCost = costPerPiece * input.desiredQuantity;
 
@@ -124,15 +132,55 @@
     };
   }
 
+
+  function compareFabricWidths(input, widths) {
+    const comparisons = widths.map(width => {
+      const result = calculateBuyFabric({
+        ...input,
+        fabricWidth: width
+      });
+
+      return {
+        width,
+        piecesAcross: result.piecesAcross,
+        rowsNeeded: result.rowsNeeded,
+        neededLength: result.neededLength,
+        suggestedLength: result.suggestedLength,
+        rotated: result.rotated,
+        fits: result.piecesAcross > 0,
+        isBest: false
+      };
+    });
+
+    const fittingOptions = comparisons.filter(item => item.fits);
+    fittingOptions.sort((first, second) => {
+      if (first.neededLength !== second.neededLength) {
+        return first.neededLength - second.neededLength;
+      }
+
+      return second.piecesAcross - first.piecesAcross;
+    });
+
+    if (fittingOptions.length > 0) {
+      const best = fittingOptions[0];
+      const bestMatch = comparisons.find(item => item.width === best.width);
+      if (bestMatch) bestMatch.isBest = true;
+    }
+
+    return comparisons;
+  }
+
   const Calculator = {
     getFinalPieceSize,
     calculateFitCount,
     calculateOccupiedLength,
     calculatePricePerMeter,
+    roundUpPurchaseLength,
     calculateOrientation,
     chooseBestOrientation,
     calculateHaveFabric,
-    calculateBuyFabric
+    calculateBuyFabric,
+    compareFabricWidths
   };
 
   return Calculator;
