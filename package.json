@@ -1,0 +1,9 @@
+{
+  "name": "calculadora-para-costureira",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Calculadora de corte para costureiras.",
+  "scripts": {
+    "test": "node --test"
+  }
+}
