@@ -170,6 +170,52 @@
     return comparisons;
   }
 
+
+  const mattressPresets = {
+    solteiro: { width: 88, length: 188 },
+    casal: { width: 138, length: 188 },
+    queen: { width: 158, length: 198 },
+    king: { width: 193, length: 203 }
+  };
+
+  function getMattressPreset(type) {
+    if (!type) return null;
+    return mattressPresets[type] || null;
+  }
+
+  function calculateFittedSheet(input) {
+    const sideDrop = input.mattressHeight + input.underturnAllowance;
+    const cutWidth = input.mattressWidth + (sideDrop * 2);
+    const cutLength = input.mattressLength + (sideDrop * 2);
+    const cornerSquare = sideDrop;
+    const neededLength = cutLength;
+    const suggestedLength = roundUpPurchaseLength(neededLength);
+    const pricePerMeter = calculatePricePerMeter(input);
+    const totalCost = pricePerMeter > 0 ? pricePerMeter * (neededLength / 100) : 0;
+    const fitsWidth = input.fabricWidth >= cutWidth;
+
+    const alerts = [];
+    if (!fitsWidth) {
+      alerts.push({ type: 'danger', text: 'A largura desse tecido não é suficiente para cortar o lençol nessa posição.' });
+      alerts.push({ type: 'danger', text: 'Use um tecido mais largo ou avalie cortar com emenda.' });
+    } else {
+      alerts.push({ type: 'success', text: 'O tecido cabe na largura informada para esse lençol.' });
+    }
+
+    return {
+      sideDrop,
+      cutWidth,
+      cutLength,
+      cornerSquare,
+      neededLength,
+      suggestedLength,
+      pricePerMeter,
+      totalCost,
+      fitsWidth,
+      alerts
+    };
+  }
+
   const Calculator = {
     getFinalPieceSize,
     calculateFitCount,
@@ -180,7 +226,9 @@
     chooseBestOrientation,
     calculateHaveFabric,
     calculateBuyFabric,
-    compareFabricWidths
+    compareFabricWidths,
+    getMattressPreset,
+    calculateFittedSheet
   };
 
   return Calculator;
