@@ -6,6 +6,9 @@ const comparisonWidths = [115, 120, 140, 150, 160, 180, 250, 300];
 const tabs = document.querySelectorAll('.tab');
 const form = document.querySelector('#calculatorForm');
 const quantityGroup = document.querySelector('#quantityGroup');
+const fabricSection = document.querySelector('#fabricSection');
+const pieceSection = document.querySelector('#pieceSection');
+const costSection = document.querySelector('#costSection');
 const fabricLengthGroup = document.querySelector('#fabricLengthGroup');
 const sheetModeSection = document.querySelector('#sheetModeSection');
 const resultLeadEl = document.querySelector('#resultLead');
@@ -34,8 +37,9 @@ const formatSuggestedLength = valueCm => valueCm < 100 ? formatCm(valueCm) : for
 const formatSuggestedLengthDetail = valueCm => valueCm < 100 ? formatCm(valueCm) : `${formatCm(valueCm)} / ${formatMeters(valueCm)}`;
 
 function getInputs() {
+  const activeFabricWidth = currentMode === 'sheet' ? getNumber('#sheetFabricWidth') : getNumber('#fabricWidth');
   return {
-    fabricWidth: getNumber('#fabricWidth'),
+    fabricWidth: activeFabricWidth,
     fabricLength: getNumber('#fabricLength'),
     pieceWidth: getNumber('#pieceWidth'),
     pieceLength: getNumber('#pieceLength'),
@@ -146,7 +150,18 @@ function calculate() {
   summaryEl.textContent=lastSummary; copyButton.classList.remove('hidden');
 }
 
-function setMode(mode){currentMode=mode;tabs.forEach(t=>t.classList.toggle('active',t.dataset.mode===mode));quantityGroup.classList.toggle('hidden',mode!=='buy');fabricLengthGroup.classList.toggle('hidden',mode!=='have');sheetModeSection.classList.toggle('hidden',mode!=='sheet');calculate();}
+function setMode(mode){
+  currentMode=mode;
+  const isSheetMode = mode === 'sheet';
+  tabs.forEach(t=>t.classList.toggle('active',t.dataset.mode===mode));
+  quantityGroup.classList.toggle('hidden',mode!=='buy');
+  fabricSection.classList.toggle('hidden',isSheetMode);
+  pieceSection.classList.toggle('hidden',isSheetMode);
+  costSection.classList.toggle('hidden',isSheetMode);
+  fabricLengthGroup.classList.toggle('hidden',mode!=='have');
+  sheetModeSection.classList.toggle('hidden',!isSheetMode);
+  calculate();
+}
 
 document.querySelector('#mattressType').addEventListener('change', () => {
   const preset = getMattressPreset(document.querySelector('#mattressType').value);
@@ -156,9 +171,10 @@ document.querySelector('#mattressType').addEventListener('change', () => {
 
 tabs.forEach(tab=>tab.addEventListener('click',()=>setMode(tab.dataset.mode)));
 document.querySelectorAll('.preset-btn').forEach(button=>button.addEventListener('click',()=>{document.querySelector('#fabricWidth').value=button.dataset.width;calculate();}));
+document.querySelectorAll('.sheet-preset-btn').forEach(button=>button.addEventListener('click',()=>{document.querySelector('#sheetFabricWidth').value=button.dataset.width;calculate();}));
 form.addEventListener('submit',event=>{event.preventDefault();calculate();});
 form.addEventListener('input',()=>calculate());
-clearButton.addEventListener('click',()=>{form.reset();document.querySelector('#fabricWidth').value=150;document.querySelector('#fabricLength').value=200;document.querySelector('#desiredQuantity').value=50;document.querySelector('#mattressWidth').value=150;document.querySelector('#mattressLength').value=190;document.querySelector('#mattressHeight').value=14;document.querySelector('#underturnAllowance').value=10;calculate();});
+clearButton.addEventListener('click',()=>{form.reset();document.querySelector('#fabricWidth').value=150;document.querySelector('#sheetFabricWidth').value=150;document.querySelector('#fabricLength').value=200;document.querySelector('#desiredQuantity').value=50;document.querySelector('#mattressWidth').value=150;document.querySelector('#mattressLength').value=190;document.querySelector('#mattressHeight').value=14;document.querySelector('#underturnAllowance').value=10;calculate();});
 copyButton.addEventListener('click', async ()=>{try{await navigator.clipboard.writeText(lastSummary);copyButton.textContent='Resumo copiado!';setTimeout(()=>{copyButton.textContent='Copiar resumo';},1800);}catch(error){alert('Não foi possível copiar automaticamente.');}});
 
 calculate();
