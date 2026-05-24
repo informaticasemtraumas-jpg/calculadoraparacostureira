@@ -37,8 +37,9 @@ const formatSuggestedLength = valueCm => valueCm < 100 ? formatCm(valueCm) : for
 const formatSuggestedLengthDetail = valueCm => valueCm < 100 ? formatCm(valueCm) : `${formatCm(valueCm)} / ${formatMeters(valueCm)}`;
 
 function getInputs() {
+  const activeFabricWidth = currentMode === 'sheet' ? getNumber('#sheetFabricWidth') : getNumber('#fabricWidth');
   return {
-    fabricWidth: getNumber('#fabricWidth'),
+    fabricWidth: activeFabricWidth,
     fabricLength: getNumber('#fabricLength'),
     pieceWidth: getNumber('#pieceWidth'),
     pieceLength: getNumber('#pieceLength'),
@@ -170,9 +171,10 @@ document.querySelector('#mattressType').addEventListener('change', () => {
 
 tabs.forEach(tab=>tab.addEventListener('click',()=>setMode(tab.dataset.mode)));
 document.querySelectorAll('.preset-btn').forEach(button=>button.addEventListener('click',()=>{document.querySelector('#fabricWidth').value=button.dataset.width;calculate();}));
+document.querySelectorAll('.sheet-preset-btn').forEach(button=>button.addEventListener('click',()=>{document.querySelector('#sheetFabricWidth').value=button.dataset.width;calculate();}));
 form.addEventListener('submit',event=>{event.preventDefault();calculate();});
 form.addEventListener('input',()=>calculate());
-clearButton.addEventListener('click',()=>{form.reset();document.querySelector('#fabricWidth').value=150;document.querySelector('#fabricLength').value=200;document.querySelector('#desiredQuantity').value=50;document.querySelector('#mattressWidth').value=150;document.querySelector('#mattressLength').value=190;document.querySelector('#mattressHeight').value=14;document.querySelector('#underturnAllowance').value=10;calculate();});
+clearButton.addEventListener('click',()=>{form.reset();document.querySelector('#fabricWidth').value=150;document.querySelector('#sheetFabricWidth').value=150;document.querySelector('#fabricLength').value=200;document.querySelector('#desiredQuantity').value=50;document.querySelector('#mattressWidth').value=150;document.querySelector('#mattressLength').value=190;document.querySelector('#mattressHeight').value=14;document.querySelector('#underturnAllowance').value=10;calculate();});
 copyButton.addEventListener('click', async ()=>{try{await navigator.clipboard.writeText(lastSummary);copyButton.textContent='Resumo copiado!';setTimeout(()=>{copyButton.textContent='Copiar resumo';},1800);}catch(error){alert('Não foi possível copiar automaticamente.');}});
 
 calculate();
