@@ -6,6 +6,9 @@ const comparisonWidths = [115, 120, 140, 150, 160, 180, 250, 300];
 const tabs = document.querySelectorAll('.tab');
 const form = document.querySelector('#calculatorForm');
 const quantityGroup = document.querySelector('#quantityGroup');
+const fabricSection = document.querySelector('#fabricSection');
+const pieceSection = document.querySelector('#pieceSection');
+const costSection = document.querySelector('#costSection');
 const fabricLengthGroup = document.querySelector('#fabricLengthGroup');
 const sheetModeSection = document.querySelector('#sheetModeSection');
 const resultLeadEl = document.querySelector('#resultLead');
@@ -146,7 +149,18 @@ function calculate() {
   summaryEl.textContent=lastSummary; copyButton.classList.remove('hidden');
 }
 
-function setMode(mode){currentMode=mode;tabs.forEach(t=>t.classList.toggle('active',t.dataset.mode===mode));quantityGroup.classList.toggle('hidden',mode!=='buy');fabricLengthGroup.classList.toggle('hidden',mode!=='have');sheetModeSection.classList.toggle('hidden',mode!=='sheet');calculate();}
+function setMode(mode){
+  currentMode=mode;
+  const isSheetMode = mode === 'sheet';
+  tabs.forEach(t=>t.classList.toggle('active',t.dataset.mode===mode));
+  quantityGroup.classList.toggle('hidden',mode!=='buy');
+  fabricSection.classList.toggle('hidden',isSheetMode);
+  pieceSection.classList.toggle('hidden',isSheetMode);
+  costSection.classList.toggle('hidden',isSheetMode);
+  fabricLengthGroup.classList.toggle('hidden',mode!=='have');
+  sheetModeSection.classList.toggle('hidden',!isSheetMode);
+  calculate();
+}
 
 document.querySelector('#mattressType').addEventListener('change', () => {
   const preset = getMattressPreset(document.querySelector('#mattressType').value);
