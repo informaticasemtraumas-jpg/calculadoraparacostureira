@@ -462,6 +462,9 @@ footer {
 .tabs-3 {
   grid-template-columns: repeat(3, 1fr);
 }
+.tabs-4 {
+  grid-template-columns: repeat(4, 1fr);
+}
 
 .sheet-preview {
   position: relative;
