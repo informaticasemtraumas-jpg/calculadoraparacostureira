@@ -16,13 +16,75 @@
     <div class="layout">
       <section class="card">
         <div class="tabs tabs-3" aria-label="Escolha o modo da calculadora">
-          <button class="tab active" type="button" data-mode="have">Tenho tecido</button>
-          <button class="tab" type="button" data-mode="buy">Quero calcular compra</button>
+          <button class="tab active" type="button" data-mode="project">Projeto Livre</button>
+          <button class="tab" type="button" data-mode="simple">Corte Simples</button>
           <button class="tab" type="button" data-mode="sheet">Lençol com elástico</button>
         </div>
 
         <form id="calculatorForm">
-          <div class="section">
+          <div class="section" id="projectModeSection">
+            <h2>Projeto Livre</h2>
+            <div class="grid">
+              <div>
+                <label for="projectName">Nome do projeto</label>
+                <input id="projectName" type="text" placeholder="Ex: Kit cama casal" />
+              </div>
+              <div>
+                <label for="projectClient">Cliente (opcional)</label>
+                <input id="projectClient" type="text" placeholder="Ex: Maria" />
+              </div>
+              <div>
+                <label for="projectNotes">Observações (opcional)</label>
+                <input id="projectNotes" type="text" placeholder="Ex: Tricoline, estampa floral" />
+              </div>
+            </div>
+            <h2 style="margin-top: 16px;">Configurações gerais</h2>
+            <div class="grid">
+              <div>
+                <label for="projectFabricWidth">Largura do tecido em cm</label>
+                <input id="projectFabricWidth" type="number" min="0" step="0.1" value="150" />
+                <div class="presets" aria-label="Larguras comuns de tecido para projeto livre">
+                  <button type="button" class="project-preset-btn" data-width="115">115</button>
+                  <button type="button" class="project-preset-btn" data-width="120">120</button>
+                  <button type="button" class="project-preset-btn" data-width="140">140</button>
+                  <button type="button" class="project-preset-btn" data-width="150">150</button>
+                  <button type="button" class="project-preset-btn" data-width="160">160</button>
+                  <button type="button" class="project-preset-btn" data-width="180">180</button>
+                  <button type="button" class="project-preset-btn" data-width="250">250</button>
+                  <button type="button" class="project-preset-btn" data-width="300">300</button>
+                </div>
+              </div>
+              <div>
+                <label for="projectPricePerMeter">Preço por metro linear em R$ (opcional)</label>
+                <input id="projectPricePerMeter" type="text" inputmode="decimal" placeholder="Ex: 32,90" />
+              </div>
+              <div>
+                <label for="projectDefaultMargin">Margem padrão em cm</label>
+                <input id="projectDefaultMargin" type="number" min="0" step="0.1" value="1" />
+              </div>
+              <div>
+                <label for="projectDefaultSpacing">Espaçamento padrão em cm</label>
+                <input id="projectDefaultSpacing" type="number" min="0" step="0.1" value="1" />
+              </div>
+            </div>
+            <label class="checkbox-row" for="projectAllowRotate">
+              <input id="projectAllowRotate" type="checkbox" checked />
+              Permitir girar cortes por padrão
+            </label>
+            <h2 style="margin-top: 16px;">Lista de cortes</h2>
+            <div id="projectCutsList"></div>
+            <button class="secondary-btn" type="button" id="addProjectCutButton">Adicionar corte</button>
+          </div>
+
+          <div class="section hidden" id="simpleModeSection">
+            <h2>Corte Simples</h2>
+            <div class="tabs simple-tabs" aria-label="Modo de corte simples">
+              <button class="tab simple-tab active" type="button" data-simple-mode="have">Tenho tecido</button>
+              <button class="tab simple-tab" type="button" data-simple-mode="buy">Quero calcular compra</button>
+            </div>
+          </div>
+
+          <div class="section" id="fabricSection">
             <h2>Medidas do tecido</h2>
             <div class="grid">
               <div>
@@ -48,7 +110,7 @@
             </div>
           </div>
 
-          <div class="section">
+          <div class="section" id="pieceSection">
             <h2>Medidas da peça</h2>
             <div class="grid">
               <div>
@@ -88,7 +150,7 @@
             </div>
           </div>
 
-          <div class="section">
+          <div class="section" id="costSection">
             <h2>Custo do tecido opcional</h2>
             <div class="grid">
               <div>
@@ -113,6 +175,20 @@
           <div class="section hidden" id="sheetModeSection">
             <h2>Lençol com elástico</h2>
             <div class="grid">
+              <div>
+                <label for="sheetFabricWidth">Largura do tecido em cm</label>
+                <input id="sheetFabricWidth" type="number" min="0" step="0.1" value="150" />
+                <div class="presets" aria-label="Larguras comuns de tecido para lençol">
+                  <button type="button" class="sheet-preset-btn" data-width="115">115</button>
+                  <button type="button" class="sheet-preset-btn" data-width="120">120</button>
+                  <button type="button" class="sheet-preset-btn" data-width="140">140</button>
+                  <button type="button" class="sheet-preset-btn" data-width="150">150</button>
+                  <button type="button" class="sheet-preset-btn" data-width="160">160</button>
+                  <button type="button" class="sheet-preset-btn" data-width="180">180</button>
+                  <button type="button" class="sheet-preset-btn" data-width="250">250</button>
+                  <button type="button" class="sheet-preset-btn" data-width="300">300</button>
+                </div>
+              </div>
               <div>
                 <label for="mattressType">Tipo de colchão</label>
                 <select id="mattressType">
