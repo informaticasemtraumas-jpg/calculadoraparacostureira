@@ -107,7 +107,8 @@ async function initAuth() {
     updateAuthUI();
   });
 }
-let currentMode = 'have';
+let currentMode = 'project';
+let simpleMode = 'have';
 let lastSummary = '';
 
 const comparisonWidths = [115, 120, 140, 150, 160, 180, 250, 300];
@@ -121,6 +122,8 @@ const costSection = document.querySelector('#costSection');
 const fabricLengthGroup = document.querySelector('#fabricLengthGroup');
 const sheetModeSection = document.querySelector('#sheetModeSection');
 const projectModeSection = document.querySelector('#projectModeSection');
+const simpleModeSection = document.querySelector('#simpleModeSection');
+const simpleTabs = document.querySelectorAll('.subtab');
 const projectCutsList = document.querySelector('#projectCutsList');
 const addProjectCutButton = document.querySelector('#addProjectCutButton');
 const resultLeadEl = document.querySelector('#resultLead');
@@ -282,17 +285,16 @@ function renderProjectResults(input, result) {
   const totalCuts = result.items.length;
   const costItem = input.pricePerMeter > 0 ? renderResultItem(moneyFormatter.format(result.totalCost), 'Custo estimado total') : '';
   resultsEl.innerHTML = [
-    renderResultItem(totalCuts, 'Total de cortes'),
-    renderResultItem(result.totalQty, 'Quantidade total de itens'),
-    renderResultItem(formatCm(result.totalLengthCm), 'Comprimento total em cm'),
-    renderResultItem(formatMeters(result.totalLengthCm), 'Comprimento total em metros'),
-    renderResultItem(formatSuggestedLengthDetail(result.suggestedLength), 'Sugestão arredondada de compra'),
-    costItem
+    renderResultItem(formatMeters(result.totalLengthCm), 'Tecido total necessário'),
+    renderResultItem(formatSuggestedLengthDetail(result.suggestedLength), 'Sugestão de compra'),
+    costItem || renderResultItem('—', 'Custo estimado total (preencha o preço por metro para ver)'),
+    renderResultItem(result.totalQty, 'Quantidade total de cortes'),
+    renderResultItem(totalCuts, 'Itens cadastrados')
   ].join('');
   const itemLines = result.items.map(item => item.fits
     ? `<div class="result-item"><strong>${item.cut.name}</strong><span>Qtd: ${item.cut.quantity} • Medida final: ${formatPieceMeasure(item.finalWidth,item.finalLength)} • ${item.piecesAcross} por faixa • ${item.rowsNeeded} fileiras • ${formatCm(item.neededLength)}${input.pricePerMeter>0?` • ${moneyFormatter.format(item.itemCost)}`:''}</span></div>`
     : `<div class="result-item"><strong>${item.cut.name}</strong><span>Não cabe na largura do tecido.</span></div>`).join('');
-  comparisonEl.innerHTML = itemLines;
+  comparisonEl.innerHTML = `<details class="project-details"><summary>Ver detalhes dos cortes</summary><div class="details-list">${itemLines || '<p>Nenhum corte válido informado.</p>'}</div></details>`;
   resultLeadEl.textContent = `Projeto ${input.projectName || 'sem nome'}: total estimado de ${formatMeters(result.totalLengthCm)} de tecido.`;
   lastSummary = `📋 Projeto Livre\nProjeto: ${input.projectName || 'Sem nome'}\nCliente: ${input.client || '-'}\nObservações: ${input.notes || '-'}\nLargura do tecido: ${formatCm(input.fabricWidth)}\n\nCortes:\n${result.items.map(item=> item.fits ? `- ${item.cut.name}: ${item.cut.quantity} un, ${formatCm(item.neededLength)}` : `- ${item.cut.name}: não cabe`).join('\n')}\n\nTotal: ${formatCm(result.totalLengthCm)} (${formatMeters(result.totalLengthCm)})\nSugestão: ${formatSuggestedLength(result.suggestedLength)}${input.pricePerMeter>0?`\nCusto estimado: ${moneyFormatter.format(result.totalCost)}`:''}`;
 }
@@ -331,7 +333,7 @@ function validateInputs(input) {
   return errors;
 }
 
-function clearRenderedResults(msg){resultLeadEl.innerHTML='';resultsEl.innerHTML='';previewEl.innerHTML='';comparisonEl.innerHTML='';summaryEl.textContent=msg;copyButton.classList.add('hidden');}
+function clearRenderedResults(msg){resultLeadEl.innerHTML='';resultsEl.innerHTML='';previewEl.innerHTML='';comparisonEl.innerHTML='';summaryEl.textContent=msg;summaryEl.classList.remove('hidden');copyButton.classList.add('hidden');}
 
 function calculate() {
   if (currentMode === 'project') {
@@ -346,29 +348,38 @@ function calculate() {
       allowRotate: document.querySelector('#projectAllowRotate').checked
     };
     if (input.fabricWidth <= 0) { renderAlerts([{ type: 'danger', text: 'Informe a largura do tecido do Projeto Livre.' }]); clearRenderedResults('Corrija as medidas para calcular.'); return; }
-    const r = calculateProject(input); renderAlerts(r.alerts); renderProjectResults(input, r); previewEl.innerHTML = ''; summaryEl.textContent=lastSummary; copyButton.classList.remove('hidden'); return;
+    const r = calculateProject(input); renderAlerts(r.alerts); renderProjectResults(input, r); previewEl.innerHTML = ''; summaryEl.textContent=lastSummary; summaryEl.classList.add('hidden'); copyButton.classList.remove('hidden'); return;
   }
   const input = getInputs();
   const errors = validateInputs(input);
   if (errors.length) { renderAlerts(errors.map(text=>({type:'danger',text}))); clearRenderedResults('Corrija as medidas para calcular.'); return; }
-  if (currentMode === 'have') { const r=calculateHaveFabric(input); renderAlerts(r.alerts); renderHaveResults(input,r); renderLayoutPreview(input,r); }
-  else if (currentMode === 'buy') { const r=calculateBuyFabric(input); renderAlerts(r.alerts); renderBuyResults(input,r); renderLayoutPreview(input,r); }
+  if (currentMode === 'simple' && simpleMode === 'have') { const r=calculateHaveFabric(input); renderAlerts(r.alerts); renderHaveResults(input,r); renderLayoutPreview(input,r); }
+  else if (currentMode === 'simple' && simpleMode === 'buy') { const r=calculateBuyFabric(input); renderAlerts(r.alerts); renderBuyResults(input,r); renderLayoutPreview(input,r); }
   else { const r=calculateFittedSheet(input); renderAlerts(r.alerts); renderSheetResults(input,r); }
-  summaryEl.textContent=lastSummary; copyButton.classList.remove('hidden');
+  summaryEl.textContent=lastSummary; summaryEl.classList.add('hidden'); copyButton.classList.remove('hidden');
 }
 
 function setMode(mode){
   currentMode=mode;
   const isSheetMode = mode === 'sheet';
+  const isSimpleMode = mode === 'simple';
+  const activeSimple = isSimpleMode ? simpleMode : 'have';
   tabs.forEach(t=>t.classList.toggle('active',t.dataset.mode===mode));
-  quantityGroup.classList.toggle('hidden',mode!=='buy');
+  quantityGroup.classList.toggle('hidden',activeSimple!=='buy' || !isSimpleMode);
   projectModeSection.classList.toggle('hidden',mode!=='project');
-  fabricSection.classList.toggle('hidden',isSheetMode);
-  pieceSection.classList.toggle('hidden',isSheetMode);
-  costSection.classList.toggle('hidden',isSheetMode);
-  fabricLengthGroup.classList.toggle('hidden',mode!=='have');
+  simpleModeSection.classList.toggle('hidden',!isSimpleMode);
+  fabricSection.classList.toggle('hidden',!isSimpleMode);
+  pieceSection.classList.toggle('hidden',!isSimpleMode);
+  costSection.classList.toggle('hidden',!isSimpleMode);
+  fabricLengthGroup.classList.toggle('hidden',activeSimple!=='have' || !isSimpleMode);
   sheetModeSection.classList.toggle('hidden',!isSheetMode);
   calculate();
+}
+
+function setSimpleMode(mode) {
+  simpleMode = mode;
+  simpleTabs.forEach(t=>t.classList.toggle('active', t.dataset.simpleMode === mode));
+  if (currentMode === 'simple') setMode('simple');
 }
 
 document.querySelector('#mattressType').addEventListener('change', () => {
@@ -378,6 +389,7 @@ document.querySelector('#mattressType').addEventListener('change', () => {
 });
 
 tabs.forEach(tab=>tab.addEventListener('click',()=>setMode(tab.dataset.mode)));
+simpleTabs.forEach(tab=>tab.addEventListener('click',()=>setSimpleMode(tab.dataset.simpleMode)));
 document.querySelectorAll('.preset-btn').forEach(button=>button.addEventListener('click',()=>{document.querySelector('#fabricWidth').value=button.dataset.width;calculate();}));
 document.querySelectorAll('.project-preset-btn').forEach(button=>button.addEventListener('click',()=>{document.querySelector('#projectFabricWidth').value=button.dataset.width;calculate();}));
 document.querySelectorAll('.sheet-preset-btn').forEach(button=>button.addEventListener('click',()=>{document.querySelector('#sheetFabricWidth').value=button.dataset.width;calculate();}));

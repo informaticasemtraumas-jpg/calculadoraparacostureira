@@ -22,10 +22,9 @@
 
     <div class="layout">
       <section class="card">
-        <div class="tabs tabs-4" aria-label="Escolha o modo da calculadora">
+        <div class="tabs tabs-3" aria-label="Escolha o modo da calculadora">
           <button class="tab active" type="button" data-mode="project">Projeto Livre</button>
-          <button class="tab" type="button" data-mode="have">Tenho tecido</button>
-          <button class="tab" type="button" data-mode="buy">Quero calcular compra</button>
+          <button class="tab" type="button" data-mode="simple">Corte Simples</button>
           <button class="tab" type="button" data-mode="sheet">Lençol com elástico</button>
         </div>
 
@@ -84,7 +83,15 @@
             <button class="secondary-btn" type="button" id="addProjectCutButton">Adicionar corte</button>
           </div>
 
-          <div class="section" id="fabricSection">
+          <div class="section hidden" id="simpleModeSection">
+            <h2>Corte Simples</h2>
+            <div class="subtabs" aria-label="Escolha o tipo de cálculo">
+              <button class="subtab active" type="button" data-simple-mode="have">Tenho tecido</button>
+              <button class="subtab" type="button" data-simple-mode="buy">Quero calcular compra</button>
+            </div>
+          </div>
+
+          <div class="section hidden" id="fabricSection">
             <h2>Medidas do tecido</h2>
             <div class="grid">
               <div>
@@ -235,7 +242,7 @@
         <button class="secondary-btn hidden" type="button" id="copyButton" style="margin-top: 14px; width: 100%;">
           Copiar resumo
         </button>
-        <div class="summary" id="summary">Preencha as medidas e clique em calcular.</div>
+        <div class="summary hidden" id="summary">Preencha as medidas e clique em calcular.</div>
         <div id="saveGate" class="guest-gate">Crie uma conta gratuita para salvar seus cálculos.</div>
       </aside>
     </div>

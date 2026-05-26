@@ -21,6 +21,9 @@ function createElement(initial = {}) {
     dataset: {},
     classList: createClassList(),
     addEventListener() {},
+    querySelectorAll() { return []; },
+    querySelector() { return createElement(); },
+    insertAdjacentHTML() {},
     reset() {},
     ...initial
   };
@@ -51,6 +54,7 @@ function createBrowserContext() {
     'fabricPrice',
     'boughtLength',
     'allowRotate'
+    ,'projectModeSection','simpleModeSection','fabricSection','pieceSection','costSection','sheetModeSection','mattressType','mattressWidth','mattressLength','mattressHeight','underturnAllowance','sheetFabricWidth','projectCutsList','addProjectCutButton','projectFabricWidth','projectPricePerMeter','projectDefaultMargin','projectDefaultSpacing','projectAllowRotate','projectName','projectClient','projectNotes'
   ];
 
   ids.forEach(id => elements.set(`#${id}`, createElement()));
@@ -63,10 +67,19 @@ function createBrowserContext() {
   elements.get('#spacing').value = '1';
   elements.get('#desiredQuantity').value = '50';
   elements.get('#allowRotate').checked = true;
+  elements.get('#projectFabricWidth').value = '150';
+  elements.get('#projectDefaultMargin').value = '1';
+  elements.get('#projectDefaultSpacing').value = '1';
+  elements.get('#projectAllowRotate').checked = true;
 
   const tabs = [
-    createElement({ dataset: { mode: 'have' } }),
-    createElement({ dataset: { mode: 'buy' } })
+    createElement({ dataset: { mode: 'project' } }),
+    createElement({ dataset: { mode: 'simple' } }),
+    createElement({ dataset: { mode: 'sheet' } })
+  ];
+  const subtabs = [
+    createElement({ dataset: { simpleMode: 'have' } }),
+    createElement({ dataset: { simpleMode: 'buy' } })
   ];
 
   return vm.createContext({
@@ -81,6 +94,7 @@ function createBrowserContext() {
       },
       querySelectorAll(selector) {
         if (selector === '.tab') return tabs;
+        if (selector === '.subtab') return subtabs;
         if (selector === '.preset-btn') return [];
         return [];
       }
@@ -98,8 +112,10 @@ test('browser scripts load together without redeclaring calculator functions', (
     vm.runInContext(scriptSource, context, { filename: 'script.js' });
   });
   assert.equal(typeof context.Calculator.calculateHaveFabric, 'function');
-  assert.match(context.__elements.get('#resultLead').innerHTML, /Com essas medidas, cabem/);
+  assert.match(context.__elements.get('#resultLead').textContent, /Projeto/);
 
+  context.setMode('simple');
+  context.setSimpleMode('have');
   context.__elements.get('#pricePerMeter').value = '20';
   context.calculate();
   assert.match(context.__elements.get('#results').innerHTML, /R\$\s*20,00/);
@@ -110,7 +126,8 @@ test('browser scripts load together without redeclaring calculator functions', (
   context.calculate();
   assert.match(context.__elements.get('#results').innerHTML, /R\$\s*30,00/);
 
-  context.setMode('buy');
+  context.setMode('simple');
+  context.setSimpleMode('buy');
   assert.match(context.__elements.get('#resultLead').innerHTML, /Para fazer/);
   assert.match(context.__elements.get('#results').innerHTML, /Sugestão para comprar com segurança/);
   assert.match(context.__elements.get('#widthComparison').innerHTML, /Melhor aproveitamento/);
