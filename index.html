@@ -9,6 +9,13 @@
 <body>
   <main class="page">
     <header>
+      <div class="auth-bar">
+        <div id="authStatus" class="auth-status">Modo visitante</div>
+        <div class="auth-actions">
+          <button id="openAuthButton" class="secondary-btn" type="button">Entrar / Criar conta</button>
+          <button id="logoutButton" class="secondary-btn hidden" type="button">Sair</button>
+        </div>
+      </div>
       <h1>Calculadora de Corte para Costureiras</h1>
       <p>Calcule quantas peças cabem no tecido ou quanto tecido você precisa comprar.</p>
     </header>
@@ -229,6 +236,7 @@
           Copiar resumo
         </button>
         <div class="summary" id="summary">Preencha as medidas e clique em calcular.</div>
+        <div id="saveGate" class="guest-gate">Crie uma conta gratuita para salvar seus cálculos.</div>
       </aside>
     </div>
 
@@ -237,6 +245,31 @@
     </footer>
   </main>
 
+  <div id="authModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="authModalTitle">
+    <div class="modal-content">
+      <h2 id="authModalTitle">Entrar ou criar conta</h2>
+      <div id="authFeedback" class="help"></div>
+      <form id="authForm">
+        <label for="authName">Nome (apenas no cadastro)</label>
+        <input id="authName" type="text" placeholder="Seu nome" />
+
+        <label for="authEmail">E-mail</label>
+        <input id="authEmail" type="email" required placeholder="voce@email.com" />
+
+        <label for="authPassword">Senha</label>
+        <input id="authPassword" type="password" required minlength="6" placeholder="Mínimo 6 caracteres" />
+
+        <div class="actions">
+          <button id="loginButton" class="primary-btn" type="button">Entrar</button>
+          <button id="signupButton" class="secondary-btn" type="button">Criar conta</button>
+          <button id="closeAuthButton" class="secondary-btn" type="button">Fechar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="supabase.js"></script>
   <script src="calculator.js"></script>
   <script src="script.js"></script>
 </body>

@@ -1,3 +1,95 @@
+
+const hasWindow = typeof window !== 'undefined';
+const supabaseClient = hasWindow && window.createSupabaseClient ? window.createSupabaseClient() : null;
+let currentUser = null;
+
+const authStatusEl = document.querySelector('#authStatus');
+const openAuthButton = document.querySelector('#openAuthButton');
+const logoutButton = document.querySelector('#logoutButton');
+const authModal = document.querySelector('#authModal');
+const closeAuthButton = document.querySelector('#closeAuthButton');
+const authFeedback = document.querySelector('#authFeedback');
+const authName = document.querySelector('#authName');
+const authEmail = document.querySelector('#authEmail');
+const authPassword = document.querySelector('#authPassword');
+const loginButton = document.querySelector('#loginButton');
+const signupButton = document.querySelector('#signupButton');
+const saveGate = document.querySelector('#saveGate');
+
+function setAuthFeedback(text, isError) {
+  if (!authFeedback) return;
+  authFeedback.textContent = text || '';
+  authFeedback.style.color = isError ? 'var(--danger)' : 'var(--muted)';
+}
+
+function updateAuthUI() {
+  if (!authStatusEl || !openAuthButton || !logoutButton) return;
+  if (currentUser) {
+    const name = currentUser.user_metadata?.nome || currentUser.email;
+    authStatusEl.textContent = `Logada como: ${name} (${currentUser.email})`;
+    openAuthButton.classList.add('hidden');
+    logoutButton.classList.remove('hidden');
+    if (saveGate) saveGate.textContent = 'Sessão ativa. Salvamento será habilitado na próxima etapa.';
+  } else {
+    authStatusEl.textContent = 'Modo visitante';
+    openAuthButton.classList.remove('hidden');
+    logoutButton.classList.add('hidden');
+    if (saveGate) saveGate.textContent = 'Crie uma conta gratuita para salvar seus cálculos.';
+  }
+}
+
+async function createProfileForUser(user, nome) {
+  const payload = {
+    id: user.id,
+    nome: nome || user.user_metadata?.nome || user.email,
+    email: user.email,
+    plano: 'free'
+  };
+  const { error } = await supabaseClient.from('profiles').upsert(payload, { onConflict: 'id' });
+  if (error) throw error;
+}
+
+async function handleSignup() {
+  if (!supabaseClient) return setAuthFeedback('Configure o Supabase em supabase.js para ativar autenticação.', true);
+  const email = authEmail.value.trim();
+  const password = authPassword.value;
+  const nome = authName.value.trim();
+  if (!email || !password || !nome) return setAuthFeedback('Preencha nome, e-mail e senha para cadastrar.', true);
+  const { data, error } = await supabaseClient.auth.signUp({ email, password, options: { data: { nome } } });
+  if (error) return setAuthFeedback(error.message, true);
+  if (data.user) await createProfileForUser(data.user, nome);
+  setAuthFeedback('Conta criada com sucesso. Se necessário, confirme o e-mail.', false);
+}
+
+async function handleLogin() {
+  if (!supabaseClient) return setAuthFeedback('Configure o Supabase em supabase.js para ativar autenticação.', true);
+  const email = authEmail.value.trim();
+  const password = authPassword.value;
+  const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+  if (error) return setAuthFeedback(error.message, true);
+  currentUser = data.user || null;
+  updateAuthUI();
+  authModal.classList.add('hidden');
+  setAuthFeedback('Login realizado com sucesso.', false);
+}
+
+async function handleLogout() {
+  if (!supabaseClient) return;
+  await supabaseClient.auth.signOut();
+  currentUser = null;
+  updateAuthUI();
+}
+
+async function initAuth() {
+  if (!supabaseClient) { updateAuthUI(); return; }
+  const { data } = await supabaseClient.auth.getSession();
+  currentUser = data?.session?.user || null;
+  updateAuthUI();
+  supabaseClient.auth.onAuthStateChange((_event, session) => {
+    currentUser = session?.user || null;
+    updateAuthUI();
+  });
+}
 let currentMode = 'have';
 let lastSummary = '';
 
@@ -284,5 +376,13 @@ if (projectCutsList && typeof projectCutsList.insertAdjacentHTML === 'function')
 } else {
   clearButton.addEventListener('click',()=>{form.reset();calculate();});
 }
-if (projectModeSection && document.querySelector('#projectFabricWidth')) setMode('project');
+if (projectCutsList && typeof projectCutsList.insertAdjacentHTML === 'function' && projectModeSection && document.querySelector('#projectFabricWidth')) setMode('project');
 else calculate();
+
+if (openAuthButton) openAuthButton.addEventListener('click',()=>{ authModal.classList.remove('hidden'); setAuthFeedback('', false); });
+if (closeAuthButton) closeAuthButton.addEventListener('click',()=>authModal.classList.add('hidden'));
+if (loginButton) loginButton.addEventListener('click',()=>{ handleLogin().catch(error=>setAuthFeedback(error.message, true)); });
+if (signupButton) signupButton.addEventListener('click',()=>{ handleSignup().catch(error=>setAuthFeedback(error.message, true)); });
+if (logoutButton) logoutButton.addEventListener('click',()=>{ handleLogout().catch(error=>setAuthFeedback(error.message, true)); });
+
+initAuth().catch(()=>updateAuthUI());
