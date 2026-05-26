@@ -518,6 +518,11 @@ footer {
 .auth-actions { display: flex; gap: 8px; }
 .guest-gate { margin-top: 10px; color: var(--primary-dark); font-weight: 700; }
 
+
+.modal.hidden {
+  display: none;
+}
+
 .modal {
   position: fixed;
   inset: 0;
