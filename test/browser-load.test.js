@@ -50,7 +50,32 @@ function createBrowserContext() {
     'pricePerMeter',
     'fabricPrice',
     'boughtLength',
-    'allowRotate'
+    'allowRotate',
+    'projectModeSection',
+    'simpleModeSection',
+    'fabricSection',
+    'pieceSection',
+    'costSection',
+    'sheetModeSection',
+    'projectCutsList',
+    'addProjectCutButton',
+    'projectDetails',
+    'projectDetailsContent',
+    'resultPanelTitle',
+    'projectFabricWidth',
+    'projectPricePerMeter',
+    'projectDefaultMargin',
+    'projectDefaultSpacing',
+    'projectAllowRotate',
+    'projectName',
+    'projectClient',
+    'projectNotes',
+    'sheetFabricWidth',
+    'mattressType',
+    'mattressWidth',
+    'mattressLength',
+    'mattressHeight',
+    'underturnAllowance'
   ];
 
   ids.forEach(id => elements.set(`#${id}`, createElement()));
@@ -65,8 +90,14 @@ function createBrowserContext() {
   elements.get('#allowRotate').checked = true;
 
   const tabs = [
-    createElement({ dataset: { mode: 'have' } }),
-    createElement({ dataset: { mode: 'buy' } })
+    createElement({ dataset: { mode: 'project' } }),
+    createElement({ dataset: { mode: 'simple' } }),
+    createElement({ dataset: { mode: 'sheet' } })
+  ];
+
+  const simpleTabs = [
+    createElement({ dataset: { simpleMode: 'have' } }),
+    createElement({ dataset: { simpleMode: 'buy' } })
   ];
 
   return vm.createContext({
@@ -81,7 +112,10 @@ function createBrowserContext() {
       },
       querySelectorAll(selector) {
         if (selector === '.tab') return tabs;
+        if (selector === '.simple-tab') return simpleTabs;
         if (selector === '.preset-btn') return [];
+        if (selector === '.project-preset-btn') return [];
+        if (selector === '.sheet-preset-btn') return [];
         return [];
       }
     }
@@ -98,6 +132,8 @@ test('browser scripts load together without redeclaring calculator functions', (
     vm.runInContext(scriptSource, context, { filename: 'script.js' });
   });
   assert.equal(typeof context.Calculator.calculateHaveFabric, 'function');
+  context.setMode('simple');
+  context.setSimpleMode('have');
   assert.match(context.__elements.get('#resultLead').innerHTML, /Com essas medidas, cabem/);
 
   context.__elements.get('#pricePerMeter').value = '20';
@@ -110,7 +146,7 @@ test('browser scripts load together without redeclaring calculator functions', (
   context.calculate();
   assert.match(context.__elements.get('#results').innerHTML, /R\$\s*30,00/);
 
-  context.setMode('buy');
+  context.setSimpleMode('buy');
   assert.match(context.__elements.get('#resultLead').innerHTML, /Para fazer/);
   assert.match(context.__elements.get('#results').innerHTML, /Sugestão para comprar com segurança/);
   assert.match(context.__elements.get('#widthComparison').innerHTML, /Melhor aproveitamento/);

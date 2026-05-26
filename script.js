@@ -1,4 +1,5 @@
-let currentMode = 'have';
+let currentMode = 'project';
+let currentSimpleMode = 'have';
 let lastSummary = '';
 
 const comparisonWidths = [115, 120, 140, 150, 160, 180, 250, 300];
@@ -6,6 +7,11 @@ const comparisonWidths = [115, 120, 140, 150, 160, 180, 250, 300];
 const tabs = document.querySelectorAll('.tab');
 const form = document.querySelector('#calculatorForm');
 const quantityGroup = document.querySelector('#quantityGroup');
+const simpleModeSection = document.querySelector('#simpleModeSection');
+const simpleTabs = document.querySelectorAll('.simple-tab');
+const projectDetailsEl = document.querySelector('#projectDetails');
+const projectDetailsContentEl = document.querySelector('#projectDetailsContent');
+const resultPanelTitleEl = document.querySelector('#resultPanelTitle');
 const fabricSection = document.querySelector('#fabricSection');
 const pieceSection = document.querySelector('#pieceSection');
 const costSection = document.querySelector('#costSection');
@@ -69,8 +75,8 @@ const renderAlerts = alerts => { alertsEl.innerHTML = alerts.map(a => `<div clas
 
 function renderLayoutPreview(input, result) {
   if (result.piecesAcross <= 0) return (previewEl.innerHTML = '');
-  const rows = currentMode === 'have' ? result.rowsInLength : result.rowsNeeded;
-  const totalPieces = currentMode === 'have' ? result.totalPieces : input.desiredQuantity;
+  const rows = currentSimpleMode === 'have' ? result.rowsInLength : result.rowsNeeded;
+  const totalPieces = currentSimpleMode === 'have' ? result.totalPieces : input.desiredQuantity;
   const piecesToRender = Math.min(totalPieces, 60);
   const omitted = totalPieces - piecesToRender;
   let pieces = '';
@@ -173,17 +179,17 @@ function renderProjectResults(input, result) {
   const totalCuts = result.items.length;
   const costItem = input.pricePerMeter > 0 ? renderResultItem(moneyFormatter.format(result.totalCost), 'Custo estimado total') : '';
   resultsEl.innerHTML = [
-    renderResultItem(totalCuts, 'Total de cortes'),
-    renderResultItem(result.totalQty, 'Quantidade total de itens'),
-    renderResultItem(formatCm(result.totalLengthCm), 'Comprimento total em cm'),
-    renderResultItem(formatMeters(result.totalLengthCm), 'Comprimento total em metros'),
-    renderResultItem(formatSuggestedLengthDetail(result.suggestedLength), 'Sugestão arredondada de compra'),
+    renderResultItem(formatMeters(result.totalLengthCm), 'Tecido total necessário'),
+    renderResultItem(formatSuggestedLengthDetail(result.suggestedLength), 'Sugestão de compra'),
+    renderResultItem(result.totalQty, 'Quantidade total de cortes'),
+    renderResultItem(totalCuts, 'Itens diferentes na lista'),
     costItem
   ].join('');
   const itemLines = result.items.map(item => item.fits
     ? `<div class="result-item"><strong>${item.cut.name}</strong><span>Qtd: ${item.cut.quantity} • Medida final: ${formatPieceMeasure(item.finalWidth,item.finalLength)} • ${item.piecesAcross} por faixa • ${item.rowsNeeded} fileiras • ${formatCm(item.neededLength)}${input.pricePerMeter>0?` • ${moneyFormatter.format(item.itemCost)}`:''}</span></div>`
     : `<div class="result-item"><strong>${item.cut.name}</strong><span>Não cabe na largura do tecido.</span></div>`).join('');
-  comparisonEl.innerHTML = itemLines;
+  projectDetailsContentEl.innerHTML = itemLines;
+  projectDetailsEl.classList.toggle('hidden', !itemLines);
   resultLeadEl.textContent = `Projeto ${input.projectName || 'sem nome'}: total estimado de ${formatMeters(result.totalLengthCm)} de tecido.`;
   lastSummary = `📋 Projeto Livre\nProjeto: ${input.projectName || 'Sem nome'}\nCliente: ${input.client || '-'}\nObservações: ${input.notes || '-'}\nLargura do tecido: ${formatCm(input.fabricWidth)}\n\nCortes:\n${result.items.map(item=> item.fits ? `- ${item.cut.name}: ${item.cut.quantity} un, ${formatCm(item.neededLength)}` : `- ${item.cut.name}: não cabe`).join('\n')}\n\nTotal: ${formatCm(result.totalLengthCm)} (${formatMeters(result.totalLengthCm)})\nSugestão: ${formatSuggestedLength(result.suggestedLength)}${input.pricePerMeter>0?`\nCusto estimado: ${moneyFormatter.format(result.totalCost)}`:''}`;
 }
@@ -193,7 +199,7 @@ function renderHaveResults(input, result) { /* unchanged simplified */
   resultLeadEl.innerHTML = `Com essas medidas, cabem <strong>${result.totalPieces} peça(s)</strong> neste tecido.`;
   const cost = result.pricePerMeter > 0 ? [renderResultItem(moneyFormatter.format(result.pricePerMeter), 'Custo por metro linear'), renderResultItem(moneyFormatter.format(result.costPerPiece), 'Custo por peça')].join('') : '';
   resultsEl.innerHTML = [renderResultItem(result.totalPieces,'Peças que cabem'),renderResultItem(result.piecesAcross,'Peças por faixa/largura'),renderResultItem(result.rowsInLength,'Fileiras no comprimento'),renderResultItem(formatCm(result.usedLength),'Comprimento usado'),renderResultItem(formatCm(Math.max(result.remainingLength,0)),'Sobra de tecido'),cost].join('');
-  comparisonEl.innerHTML='';
+  comparisonEl.innerHTML=''; projectDetailsEl.classList.add('hidden');
   lastSummary = `✂️ Resumo do corte\n\nTecido: ${formatCm(input.fabricWidth)} de largura\nComprimento disponível: ${formatCm(input.fabricLength)}\nPeça: ${formatPieceMeasure(input.pieceWidth,input.pieceLength)}\nMargem: ${formatCm(input.margin)}\nEspaço entre peças: ${formatCm(input.spacing)}\nEncaixe: ${result.rotated?'peça girada':'peça normal'}\n\nResultado:\nCabem ${result.totalPieces} peças no tecido.`;
 }
 
@@ -209,7 +215,7 @@ function renderBuyResults(input, result) {
 function validateInputs(input) {
   const errors = [];
   if (input.fabricWidth <= 0) errors.push('Informe a largura do tecido.');
-  if (currentMode === 'have' && input.fabricLength <= 0) errors.push('Informe o comprimento disponível do tecido.');
+  if (currentMode === 'simple' && currentSimpleMode === 'have' && input.fabricLength <= 0) errors.push('Informe o comprimento disponível do tecido.');
   if (currentMode === 'sheet') {
     if (input.mattressWidth <= 0) errors.push('Informe a largura do colchão.');
     if (input.mattressLength <= 0) errors.push('Informe o comprimento do colchão.');
@@ -222,7 +228,7 @@ function validateInputs(input) {
   return errors;
 }
 
-function clearRenderedResults(msg){resultLeadEl.innerHTML='';resultsEl.innerHTML='';previewEl.innerHTML='';comparisonEl.innerHTML='';summaryEl.textContent=msg;copyButton.classList.add('hidden');}
+function clearRenderedResults(msg){resultLeadEl.innerHTML='';resultsEl.innerHTML='';previewEl.innerHTML='';comparisonEl.innerHTML=''; projectDetailsEl.classList.add('hidden');summaryEl.textContent=msg;summaryEl.classList.add('hidden');copyButton.classList.add('hidden');projectDetailsEl.classList.add('hidden');projectDetailsContentEl.innerHTML='';}
 
 function calculate() {
   if (currentMode === 'project') {
@@ -237,28 +243,40 @@ function calculate() {
       allowRotate: document.querySelector('#projectAllowRotate').checked
     };
     if (input.fabricWidth <= 0) { renderAlerts([{ type: 'danger', text: 'Informe a largura do tecido do Projeto Livre.' }]); clearRenderedResults('Corrija as medidas para calcular.'); return; }
-    const r = calculateProject(input); renderAlerts(r.alerts); renderProjectResults(input, r); previewEl.innerHTML = ''; summaryEl.textContent=lastSummary; copyButton.classList.remove('hidden'); return;
+    const r = calculateProject(input); renderAlerts(r.alerts); renderProjectResults(input, r); previewEl.innerHTML = ''; summaryEl.textContent=lastSummary; summaryEl.classList.add('hidden'); copyButton.classList.remove('hidden'); return;
   }
   const input = getInputs();
   const errors = validateInputs(input);
   if (errors.length) { renderAlerts(errors.map(text=>({type:'danger',text}))); clearRenderedResults('Corrija as medidas para calcular.'); return; }
-  if (currentMode === 'have') { const r=calculateHaveFabric(input); renderAlerts(r.alerts); renderHaveResults(input,r); renderLayoutPreview(input,r); }
-  else if (currentMode === 'buy') { const r=calculateBuyFabric(input); renderAlerts(r.alerts); renderBuyResults(input,r); renderLayoutPreview(input,r); }
+  if (currentSimpleMode === 'have') { const r=calculateHaveFabric(input); renderAlerts(r.alerts); renderHaveResults(input,r); renderLayoutPreview(input,r); }
+  else if (currentSimpleMode === 'buy') { const r=calculateBuyFabric(input); renderAlerts(r.alerts); renderBuyResults(input,r); renderLayoutPreview(input,r); }
   else { const r=calculateFittedSheet(input); renderAlerts(r.alerts); renderSheetResults(input,r); }
-  summaryEl.textContent=lastSummary; copyButton.classList.remove('hidden');
+  summaryEl.textContent=lastSummary; summaryEl.classList.add('hidden'); copyButton.classList.remove('hidden');
+}
+
+function setSimpleMode(mode){
+  currentSimpleMode = mode;
+  simpleTabs.forEach(t=>t.classList.toggle('active', t.dataset.simpleMode===mode));
+  quantityGroup.classList.toggle('hidden', mode!=='buy');
+  fabricLengthGroup.classList.toggle('hidden', mode!=='have');
+  calculate();
 }
 
 function setMode(mode){
   currentMode=mode;
+  const isProjectMode = mode === 'project';
+  const isSimpleMode = mode === 'simple';
   const isSheetMode = mode === 'sheet';
   tabs.forEach(t=>t.classList.toggle('active',t.dataset.mode===mode));
-  quantityGroup.classList.toggle('hidden',mode!=='buy');
-  projectModeSection.classList.toggle('hidden',mode!=='project');
-  fabricSection.classList.toggle('hidden',isSheetMode);
-  pieceSection.classList.toggle('hidden',isSheetMode);
-  costSection.classList.toggle('hidden',isSheetMode);
-  fabricLengthGroup.classList.toggle('hidden',mode!=='have');
+  projectModeSection.classList.toggle('hidden',!isProjectMode);
+  simpleModeSection.classList.toggle('hidden',!isSimpleMode);
+  fabricSection.classList.toggle('hidden',!isSimpleMode);
+  pieceSection.classList.toggle('hidden',!isSimpleMode);
+  costSection.classList.toggle('hidden',!isSimpleMode);
   sheetModeSection.classList.toggle('hidden',!isSheetMode);
+  quantityGroup.classList.toggle('hidden', !isSimpleMode || currentSimpleMode!=='buy');
+  fabricLengthGroup.classList.toggle('hidden', !isSimpleMode || currentSimpleMode!=='have');
+  resultPanelTitleEl.textContent = isProjectMode ? 'Resultado do Projeto Livre' : isSimpleMode ? 'Resultado do Corte Simples' : 'Resultado do Lençol com Elástico';
   calculate();
 }
 
@@ -269,6 +287,7 @@ document.querySelector('#mattressType').addEventListener('change', () => {
 });
 
 tabs.forEach(tab=>tab.addEventListener('click',()=>setMode(tab.dataset.mode)));
+simpleTabs.forEach(tab=>tab.addEventListener('click',()=>setSimpleMode(tab.dataset.simpleMode)));
 document.querySelectorAll('.preset-btn').forEach(button=>button.addEventListener('click',()=>{document.querySelector('#fabricWidth').value=button.dataset.width;calculate();}));
 document.querySelectorAll('.project-preset-btn').forEach(button=>button.addEventListener('click',()=>{document.querySelector('#projectFabricWidth').value=button.dataset.width;calculate();}));
 document.querySelectorAll('.sheet-preset-btn').forEach(button=>button.addEventListener('click',()=>{document.querySelector('#sheetFabricWidth').value=button.dataset.width;calculate();}));

@@ -505,3 +505,48 @@ footer {
 .sheet-corner.tr { top: 10px; right: 10px; }
 .sheet-corner.bl { bottom: 10px; left: 10px; }
 .sheet-corner.br { bottom: 10px; right: 10px; }
+
+.inline-mode-toggle {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  background: var(--soft);
+  padding: 6px;
+  border-radius: 14px;
+}
+
+.simple-tab {
+  border: none;
+  border-radius: 10px;
+  padding: 10px;
+  font-weight: 700;
+  background: transparent;
+  cursor: pointer;
+  color: var(--text);
+}
+
+.simple-tab.active {
+  background: #fff;
+  color: var(--primary-dark);
+}
+
+details#projectDetails {
+  margin-top: 12px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: #fffaf7;
+  padding: 10px;
+}
+
+details#projectDetails summary {
+  cursor: pointer;
+  font-weight: 700;
+  color: var(--primary-dark);
+}
+
+@media (max-width: 560px) {
+  .tabs.tabs-3,
+  .inline-mode-toggle {
+    grid-template-columns: 1fr;
+  }
+}
