@@ -505,3 +505,29 @@ footer {
 .sheet-corner.tr { top: 10px; right: 10px; }
 .sheet-corner.bl { bottom: 10px; left: 10px; }
 .sheet-corner.br { bottom: 10px; right: 10px; }
+
+.auth-bar {
+  margin-top: 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+.auth-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 16px;
+}
+.auth-modal-card {
+  background: #fff;
+  border-radius: 16px;
+  padding: 18px;
+  width: min(520px, 100%);
+}
+.auth-help { text-align: center; margin-top: 8px; }

@@ -23,6 +23,29 @@ const comparisonEl = document.querySelector('#widthComparison');
 const copyButton = document.querySelector('#copyButton');
 const clearButton = document.querySelector('#clearButton');
 
+const authBar = document.querySelector('#authBar');
+const authStatusEl = document.querySelector('#authStatus');
+const openLoginButton = document.querySelector('#openLoginButton');
+const openSignupButton = document.querySelector('#openSignupButton');
+const logoutButton = document.querySelector('#logoutButton');
+const authFeatureHint = document.querySelector('#authFeatureHint');
+const authModal = document.querySelector('#authModal');
+const authModalTitle = document.querySelector('#authModalTitle');
+const authModalSubtitle = document.querySelector('#authModalSubtitle');
+const authNameGroup = document.querySelector('#authNameGroup');
+const authName = document.querySelector('#authName');
+const authEmail = document.querySelector('#authEmail');
+const authPassword = document.querySelector('#authPassword');
+const authSubmitButton = document.querySelector('#authSubmitButton');
+const authCancelButton = document.querySelector('#authCancelButton');
+const authMessage = document.querySelector('#authMessage');
+
+const { supabase, hasConfig } = globalThis.AppSupabase || {};
+let authMode = 'login';
+let currentUser = null;
+let currentProfile = null;
+
+
 const moneyFormatter = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 const decimalFormatter = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
 const meterFormatter = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -284,5 +307,105 @@ if (projectCutsList && typeof projectCutsList.insertAdjacentHTML === 'function')
 } else {
   clearButton.addEventListener('click',()=>{form.reset();calculate();});
 }
-if (projectModeSection && document.querySelector('#projectFabricWidth')) setMode('project');
-else calculate();
+setMode('have');
+
+
+function isValidEmail(email) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email); }
+
+function setAuthMessage(message, isError = true) {
+  authMessage.textContent = message;
+  authMessage.style.color = isError ? 'var(--danger)' : 'var(--success)';
+}
+
+function updateAuthUI() {
+  const loggedIn = Boolean(currentUser);
+  authStatusEl.textContent = loggedIn ? `Olá, ${currentProfile?.nome || currentUser.email}` : 'Modo visitante';
+  openLoginButton.classList.toggle('hidden', loggedIn);
+  openSignupButton.classList.toggle('hidden', loggedIn);
+  logoutButton.classList.toggle('hidden', !loggedIn);
+  authFeatureHint.classList.toggle('hidden', loggedIn);
+}
+
+function openAuthModal(mode) {
+  authMode = mode;
+  authModal.classList.remove('hidden');
+  authNameGroup.classList.toggle('hidden', mode !== 'signup');
+  authModalTitle.textContent = mode === 'signup' ? 'Criar conta' : 'Entrar';
+  authModalSubtitle.textContent = mode === 'signup' ? 'Crie sua conta gratuita.' : 'Acesse sua conta para continuar.';
+  authSubmitButton.textContent = mode === 'signup' ? 'Criar conta' : 'Entrar';
+  setAuthMessage('', false);
+}
+
+function closeAuthModal() { authModal.classList.add('hidden'); }
+
+async function loadProfile(userId) {
+  const { data } = await supabase.from('profiles').select('id,nome,email,plano').eq('id', userId).single();
+  currentProfile = data || null;
+}
+
+async function handleSignup() {
+  const nome = authName.value.trim();
+  const email = authEmail.value.trim().toLowerCase();
+  const senha = authPassword.value;
+  if (!nome) return setAuthMessage('Informe seu nome.');
+  if (!isValidEmail(email)) return setAuthMessage('Email inválido.');
+  if (!senha || senha.length < 6) return setAuthMessage('Senha muito curta.');
+  const { data, error } = await supabase.auth.signUp({ email, password: senha });
+  if (error) {
+    if (error.message.toLowerCase().includes('already')) return setAuthMessage('Usuário já existe.');
+    return setAuthMessage('Erro de conexão.');
+  }
+  if (!data.user) return setAuthMessage('Erro de conexão.');
+  const { error: profileError } = await supabase.from('profiles').upsert({ id: data.user.id, nome, email, plano: 'free' });
+  if (profileError) return setAuthMessage('Erro de conexão.');
+  currentUser = data.user;
+  await loadProfile(data.user.id);
+  updateAuthUI();
+  closeAuthModal();
+}
+
+async function handleLogin() {
+  const email = authEmail.value.trim().toLowerCase();
+  const senha = authPassword.value;
+  if (!isValidEmail(email)) return setAuthMessage('Email inválido.');
+  if (!senha || senha.length < 6) return setAuthMessage('Senha muito curta.');
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password: senha });
+  if (error) {
+    if (error.message.toLowerCase().includes('invalid login')) return setAuthMessage('Senha incorreta.');
+    return setAuthMessage('Erro de conexão.');
+  }
+  currentUser = data.user;
+  await loadProfile(data.user.id);
+  updateAuthUI();
+  closeAuthModal();
+}
+
+async function initAuth() {
+  if (!hasConfig || !supabase) { updateAuthUI(); return; }
+  const { data } = await supabase.auth.getSession();
+  currentUser = data?.session?.user || null;
+  if (currentUser) await loadProfile(currentUser.id);
+  updateAuthUI();
+  supabase.auth.onAuthStateChange(async (_event, session) => {
+    currentUser = session?.user || null;
+    if (currentUser) await loadProfile(currentUser.id);
+    else currentProfile = null;
+    updateAuthUI();
+  });
+}
+
+openLoginButton?.addEventListener('click', () => openAuthModal('login'));
+openSignupButton?.addEventListener('click', () => openAuthModal('signup'));
+authCancelButton?.addEventListener('click', closeAuthModal);
+authSubmitButton?.addEventListener('click', async () => {
+  if (!hasConfig || !supabase) return setAuthMessage('Erro de conexão.');
+  if (authMode === 'signup') await handleSignup(); else await handleLogin();
+});
+logoutButton?.addEventListener('click', async () => {
+  if (supabase) await supabase.auth.signOut();
+  currentUser = null;
+  currentProfile = null;
+  updateAuthUI();
+});
+
+initAuth();
