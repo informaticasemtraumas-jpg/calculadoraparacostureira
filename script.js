@@ -1,6 +1,6 @@
 
 const hasWindow = typeof window !== 'undefined';
-const supabaseClient = hasWindow && window.createSupabaseClient ? window.createSupabaseClient() : null;
+const supabaseClient = hasWindow && window.createSupabaseClient ? (window.supabaseClient || window.createSupabaseClient()) : null;
 let currentUser = null;
 
 const authStatusEl = document.querySelector('#authStatus');
@@ -20,6 +20,20 @@ function setAuthFeedback(text, isError) {
   if (!authFeedback) return;
   authFeedback.textContent = text || '';
   authFeedback.style.color = isError ? 'var(--danger)' : 'var(--muted)';
+}
+
+
+function clearAuthForm() {
+  if (authName) authName.value = '';
+  if (authEmail) authEmail.value = '';
+  if (authPassword) authPassword.value = '';
+}
+
+function closeAuthModal() {
+  if (!authModal) return;
+  authModal.classList.add('hidden');
+  authModal.classList.remove('active', 'visible');
+  clearAuthForm();
 }
 
 function updateAuthUI() {
@@ -58,6 +72,9 @@ async function handleSignup() {
   const { data, error } = await supabaseClient.auth.signUp({ email, password, options: { data: { nome } } });
   if (error) return setAuthFeedback(error.message, true);
   if (data.user) await createProfileForUser(data.user, nome);
+  currentUser = data.user || currentUser;
+  updateAuthUI();
+  closeAuthModal();
   setAuthFeedback('Conta criada com sucesso. Se necessário, confirme o e-mail.', false);
 }
 
@@ -69,7 +86,7 @@ async function handleLogin() {
   if (error) return setAuthFeedback(error.message, true);
   currentUser = data.user || null;
   updateAuthUI();
-  authModal.classList.add('hidden');
+  closeAuthModal();
   setAuthFeedback('Login realizado com sucesso.', false);
 }
 
@@ -380,7 +397,7 @@ if (projectCutsList && typeof projectCutsList.insertAdjacentHTML === 'function' 
 else calculate();
 
 if (openAuthButton) openAuthButton.addEventListener('click',()=>{ authModal.classList.remove('hidden'); setAuthFeedback('', false); });
-if (closeAuthButton) closeAuthButton.addEventListener('click',()=>authModal.classList.add('hidden'));
+if (closeAuthButton) closeAuthButton.addEventListener('click',()=>closeAuthModal());
 if (loginButton) loginButton.addEventListener('click',()=>{ handleLogin().catch(error=>setAuthFeedback(error.message, true)); });
 if (signupButton) signupButton.addEventListener('click',()=>{ handleSignup().catch(error=>setAuthFeedback(error.message, true)); });
 if (logoutButton) logoutButton.addEventListener('click',()=>{ handleLogout().catch(error=>setAuthFeedback(error.message, true)); });
