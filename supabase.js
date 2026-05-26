@@ -1,6 +1,6 @@
 window.SUPABASE_CONFIG = {
-  url: 'https://YOUR_PROJECT_REF.supabase.co',
-  anonKey: 'YOUR_SUPABASE_ANON_KEY'
+  url: 'https://bkknlkekthqbqwlxugpt.supabase.co',
+  anonKey: 'sb_publishable_uszB3relRboXt1El2Li2tA_1Q6Jbxs0'
 };
 
 window.createSupabaseClient = function createSupabaseClient() {
