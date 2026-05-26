@@ -1,6 +1,6 @@
 
 const hasWindow = typeof window !== 'undefined';
-const supabaseClient = hasWindow && window.createSupabaseClient ? window.createSupabaseClient() : null;
+const supabaseClient = hasWindow && window.createSupabaseClient ? (window.supabaseClient || window.createSupabaseClient()) : null;
 let currentUser = null;
 
 const authStatusEl = document.querySelector('#authStatus');
