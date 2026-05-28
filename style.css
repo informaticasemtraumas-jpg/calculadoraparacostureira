@@ -517,6 +517,25 @@ footer {
 .auth-status { color: var(--muted); font-weight: 700; }
 .auth-actions { display: flex; gap: 8px; }
 .guest-gate { margin-top: 10px; color: var(--primary-dark); font-weight: 700; }
+.save-feedback { margin-top: 8px; min-height: 20px; color: var(--muted); font-weight: 700; }
+.save-feedback.success { color: var(--success); }
+.save-feedback.error { color: var(--danger); }
+.my-projects {
+  margin-top: 16px;
+  border-top: 1px solid var(--border);
+  padding-top: 14px;
+}
+.my-projects h3 { margin-bottom: 10px; color: var(--primary-dark); }
+.my-projects-list { display: grid; gap: 10px; }
+.saved-project-item {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #fffaf7;
+  padding: 10px 12px;
+}
+.saved-project-item strong { display: block; color: var(--text); }
+.saved-project-item span { display: block; color: var(--muted); font-size: 13px; margin-top: 4px; }
+.saved-project-empty { color: var(--muted); }
 
 
 .modal.hidden {
