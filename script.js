@@ -15,11 +15,79 @@ const authPassword = document.querySelector('#authPassword');
 const loginButton = document.querySelector('#loginButton');
 const signupButton = document.querySelector('#signupButton');
 const saveGate = document.querySelector('#saveGate');
+const saveProjectButton = document.querySelector('#saveProjectButton');
+const saveProjectFeedback = document.querySelector('#saveProjectFeedback');
+const myProjectsSection = document.querySelector('#myProjectsSection');
+const myProjectsList = document.querySelector('#myProjectsList');
 
 function setAuthFeedback(text, isError) {
   if (!authFeedback) return;
   authFeedback.textContent = text || '';
   authFeedback.style.color = isError ? 'var(--danger)' : 'var(--muted)';
+}
+
+function setSaveFeedback(text, type = '') {
+  if (!saveProjectFeedback) return;
+  saveProjectFeedback.textContent = text || '';
+  saveProjectFeedback.classList.remove('success', 'error');
+  if (type) saveProjectFeedback.classList.add(type);
+}
+
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;');
+}
+
+function getProjectInput() {
+  return {
+    projectName: document.querySelector('#projectName').value.trim(),
+    client: document.querySelector('#projectClient').value.trim(),
+    notes: document.querySelector('#projectNotes').value.trim(),
+    fabricWidth: getNumber('#projectFabricWidth'),
+    pricePerMeter: getNumber('#projectPricePerMeter'),
+    defaultMargin: getNumber('#projectDefaultMargin'),
+    defaultSpacing: getNumber('#projectDefaultSpacing'),
+    allowRotate: document.querySelector('#projectAllowRotate').checked
+  };
+}
+
+function getColumnFromSchemaError(error) {
+  const message = `${error?.message || ''} ${error?.details || ''} ${error?.hint || ''}`;
+  const quotedMatch = message.match(/'([^']+)' column/);
+  if (quotedMatch) return quotedMatch[1];
+  const plainMatch = message.match(/column ([a-zA-Z0-9_]+) /);
+  return plainMatch ? plainMatch[1] : '';
+}
+
+async function insertWithAvailableColumns(tableName, payload, selectColumns = '*') {
+  let nextPayload = { ...payload };
+  const removedColumns = new Set();
+
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    const { data, error } = await supabaseClient
+      .from(tableName)
+      .insert(nextPayload)
+      .select(selectColumns)
+      .single();
+
+    if (!error) return data;
+
+    const missingColumn = getColumnFromSchemaError(error);
+    if (!missingColumn || removedColumns.has(missingColumn) || !(missingColumn in nextPayload)) {
+      throw error;
+    }
+
+    removedColumns.add(missingColumn);
+    const { [missingColumn]: _removedValue, ...payloadWithoutMissingColumn } = nextPayload;
+    nextPayload = payloadWithoutMissingColumn;
+    console.warn(`Campo ${missingColumn} não encontrado em ${tableName}; tentando salvar sem esse campo.`);
+  }
+
+  throw new Error(`Não foi possível salvar em ${tableName}: muitas tentativas de ajuste de colunas.`);
 }
 
 
@@ -43,12 +111,19 @@ function updateAuthUI() {
     authStatusEl.textContent = `Logada como: ${name} (${currentUser.email})`;
     openAuthButton.classList.add('hidden');
     logoutButton.classList.remove('hidden');
-    if (saveGate) saveGate.textContent = 'Sessão ativa. Salvamento será habilitado na próxima etapa.';
+    if (saveGate) saveGate.textContent = 'Você pode salvar seus Projetos Livres nesta conta.';
+    if (myProjectsSection) myProjectsSection.classList.remove('hidden');
+    loadMyProjects().catch(error => {
+      console.error('Erro ao carregar projetos salvos:', error);
+      renderMyProjectsError();
+    });
   } else {
     authStatusEl.textContent = 'Modo visitante';
     openAuthButton.classList.remove('hidden');
     logoutButton.classList.add('hidden');
-    if (saveGate) saveGate.textContent = 'Crie uma conta gratuita para salvar seus cálculos.';
+    if (saveGate) saveGate.textContent = 'Crie uma conta gratuita para salvar seus projetos.';
+    if (myProjectsSection) myProjectsSection.classList.add('hidden');
+    if (myProjectsList) myProjectsList.innerHTML = 'Entre para ver seus projetos salvos.';
   }
 }
 
@@ -110,6 +185,9 @@ async function initAuth() {
 let currentMode = 'project';
 let simpleMode = 'have';
 let lastSummary = '';
+let lastProjectInput = null;
+let lastProjectResult = null;
+let isSavingProject = false;
 
 const comparisonWidths = [115, 120, 140, 150, 160, 180, 250, 300];
 
@@ -299,6 +377,261 @@ function renderProjectResults(input, result) {
   lastSummary = `📋 Projeto Livre\nProjeto: ${input.projectName || 'Sem nome'}\nCliente: ${input.client || '-'}\nObservações: ${input.notes || '-'}\nLargura do tecido: ${formatCm(input.fabricWidth)}\n\nCortes:\n${result.items.map(item=> item.fits ? `- ${item.cut.name}: ${item.cut.quantity} un, ${formatCm(item.neededLength)}` : `- ${item.cut.name}: não cabe`).join('\n')}\n\nTotal: ${formatCm(result.totalLengthCm)} (${formatMeters(result.totalLengthCm)})\nSugestão: ${formatSuggestedLength(result.suggestedLength)}${input.pricePerMeter>0?`\nCusto estimado: ${moneyFormatter.format(result.totalCost)}`:''}`;
 }
 
+function buildProjectSummaryForSave(input, result) {
+  const cutLines = result.items.map(item => {
+    if (!item.fits) return `- ${item.cut.name}: não cabe na largura do tecido`;
+    return `- ${item.cut.name}: ${item.cut.quantity} un; corte ${formatPieceMeasure(item.cut.width, item.cut.length)}; margem ${formatCm(item.cut.margin)}; espaçamento ${formatCm(item.cut.spacing)}; permitir girar: ${item.cut.allowRotate ? 'sim' : 'não'}; ${item.rotated ? 'girado' : 'normal'}; medida final ${formatPieceMeasure(item.finalWidth, item.finalLength)}; ${item.piecesAcross} por faixa; ${item.rowsNeeded} fileira(s); comprimento ${formatCm(item.neededLength)}${input.pricePerMeter > 0 ? `; custo ${moneyFormatter.format(item.itemCost)}` : ''}`;
+  });
+
+  return `${lastSummary}\n\nItens detalhados:\n${cutLines.join('\n') || '- Nenhum corte válido informado.'}`;
+}
+
+async function saveProject() {
+  if (isSavingProject) return;
+  if (currentMode !== 'project') {
+    setSaveFeedback('O salvamento está disponível para Projeto Livre.', 'error');
+    return;
+  }
+  if (!supabaseClient) {
+    setSaveFeedback('Configure o Supabase para salvar seus projetos.', 'error');
+    return;
+  }
+  if (!currentUser) {
+    setSaveFeedback('Crie uma conta gratuita para salvar seus projetos.', 'error');
+    return;
+  }
+
+  calculate();
+  const input = lastProjectInput;
+  const result = lastProjectResult;
+  if (!input || !result || input.fabricWidth <= 0) {
+    setSaveFeedback('Calcule um Projeto Livre válido antes de salvar.', 'error');
+    return;
+  }
+
+  isSavingProject = true;
+  if (saveProjectButton) {
+    saveProjectButton.disabled = true;
+    saveProjectButton.textContent = 'Salvando...';
+  }
+  setSaveFeedback('', '');
+
+  try {
+    const projectName = input.projectName || 'Projeto Livre sem nome';
+    const project = await insertWithAvailableColumns('projetos', {
+      user_id: currentUser.id,
+      nome: projectName,
+      categoria: 'Projeto Livre',
+      observacoes: input.notes || null
+    }, 'id, nome, categoria, created_at');
+
+    const resumo = buildProjectSummaryForSave(input, result);
+    await insertWithAvailableColumns('calculos_corte', {
+      user_id: currentUser.id,
+      projeto_id: project.id,
+      nome: projectName,
+      tipo_calculo: 'projeto_livre',
+      modo_calculo: 'projeto_livre',
+      largura_tecido_cm: input.fabricWidth,
+      preco_metro_linear: input.pricePerMeter || null,
+      preco_tecido: input.pricePerMeter || null,
+      margem_costura_cm: input.defaultMargin,
+      espacamento_cm: input.defaultSpacing,
+      permitir_girar: input.allowRotate,
+      quantidade_desejada: result.totalQty || null,
+      comprimento_necessario_cm: result.totalLengthCm,
+      custo_estimado_total: result.totalCost || null,
+      resumo
+    }, 'id');
+
+    setSaveFeedback('Projeto salvo com sucesso.', 'success');
+    await loadMyProjects();
+  } catch (error) {
+    console.error('Erro completo ao salvar Projeto Livre:', error);
+    setSaveFeedback('Não foi possível salvar o projeto. Tente novamente.', 'error');
+  } finally {
+    isSavingProject = false;
+    if (saveProjectButton) {
+      saveProjectButton.disabled = false;
+      saveProjectButton.textContent = 'Salvar projeto';
+    }
+  }
+}
+
+function formatProjectDate(value) {
+  if (!value) return 'Data não informada';
+  return new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(value));
+}
+
+function formatInputNumber(value) {
+  return value === null || value === undefined || value === '' ? '' : String(value);
+}
+
+function parseSavedNumber(value) {
+  if (value === null || value === undefined) return 0;
+  const normalized = String(value).replace(/[^0-9,.-]/g, '').replace(',', '.');
+  const number = Number(normalized);
+  return Number.isFinite(number) ? number : 0;
+}
+
+function parseSavedBoolean(value) {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'string') return ['true', 't', '1', 'sim', 'yes'].includes(value.toLowerCase());
+  return Boolean(value);
+}
+
+function getSummaryField(summary, label) {
+  const match = String(summary || '').match(new RegExp(`^${label}:\\s*(.*)$`, 'mi'));
+  if (!match) return '';
+  const value = match[1].trim();
+  return value === '-' ? '' : value;
+}
+
+function setFieldValue(selector, value) {
+  const field = document.querySelector(selector);
+  if (field) field.value = formatInputNumber(value);
+}
+
+function setFieldChecked(selector, value) {
+  const field = document.querySelector(selector);
+  if (field) field.checked = Boolean(value);
+}
+
+function parseProjectCutsFromSummary(summary, defaultMargin, defaultSpacing, defaultAllowRotate) {
+  const details = String(summary || '').split('Itens detalhados:')[1] || '';
+  return details
+    .split('\n')
+    .map(line => line.trim())
+    .filter(line => line.startsWith('- '))
+    .map(line => {
+      const match = line.match(/^- (.*?): (\d+) un; corte ([\d.,]+) x ([\d.,]+) cm; margem ([\d.,]+) cm; espaçamento ([\d.,]+) cm; (?:(?:permitir girar: (sim|não); )?)(girado|normal)/i);
+      if (!match) return null;
+      const allowRotateText = match[7];
+      const orientation = match[8];
+      return {
+        name: match[1],
+        quantity: Math.max(1, Math.floor(parseSavedNumber(match[2]))),
+        width: parseSavedNumber(match[3]),
+        length: parseSavedNumber(match[4]),
+        margin: parseSavedNumber(match[5]),
+        spacing: parseSavedNumber(match[6]),
+        allowRotate: allowRotateText ? allowRotateText.toLowerCase() === 'sim' : (defaultAllowRotate || orientation === 'girado')
+      };
+    })
+    .filter(Boolean);
+}
+
+function replaceProjectCutRows(cuts) {
+  if (!projectCutsList || typeof projectCutsList.insertAdjacentHTML !== 'function') return;
+  projectCutsList.innerHTML = '';
+  const rowsToRender = cuts.length > 0 ? cuts : [{}];
+
+  rowsToRender.forEach(cut => {
+    projectCutsList.insertAdjacentHTML('beforeend', createProjectCutRow());
+    const row = projectCutsList.querySelector('.project-cut-row:last-child');
+    if (!row) return;
+    row.querySelector('.project-cut-name').value = cut.name || '';
+    row.querySelector('.project-cut-width').value = formatInputNumber(cut.width ?? '');
+    row.querySelector('.project-cut-length').value = formatInputNumber(cut.length ?? '');
+    row.querySelector('.project-cut-qty').value = formatInputNumber(cut.quantity ?? 1);
+    row.querySelector('.project-cut-margin').value = formatInputNumber(cut.margin ?? '');
+    row.querySelector('.project-cut-spacing').value = formatInputNumber(cut.spacing ?? '');
+    row.querySelector('.project-cut-rotate').checked = Boolean(cut.allowRotate);
+  });
+}
+
+function applySavedProjectToForm(project, calculation) {
+  const summary = calculation?.resumo || '';
+  const defaultMargin = parseSavedNumber(calculation?.margem_costura_cm);
+  const defaultSpacing = parseSavedNumber(calculation?.espacamento_cm);
+  const defaultAllowRotate = parseSavedBoolean(calculation?.permitir_girar);
+
+  setMode('project');
+  setFieldValue('#projectName', project?.nome || calculation?.nome || getSummaryField(summary, 'Projeto'));
+  setFieldValue('#projectClient', project?.cliente || project?.nome_cliente || getSummaryField(summary, 'Cliente'));
+  setFieldValue('#projectNotes', project?.observacoes || calculation?.observacoes || getSummaryField(summary, 'Observações'));
+  setFieldValue('#projectFabricWidth', calculation?.largura_tecido_cm || parseSavedNumber(getSummaryField(summary, 'Largura do tecido')));
+  setFieldValue('#projectPricePerMeter', calculation?.preco_metro_linear || calculation?.preco_tecido || '');
+  setFieldValue('#projectDefaultMargin', defaultMargin);
+  setFieldValue('#projectDefaultSpacing', defaultSpacing);
+  setFieldChecked('#projectAllowRotate', defaultAllowRotate);
+
+  replaceProjectCutRows(parseProjectCutsFromSummary(summary, defaultMargin, defaultSpacing, defaultAllowRotate));
+  calculate();
+}
+
+async function openSavedProject(projectId) {
+  if (!supabaseClient || !currentUser || !projectId) return;
+  setSaveFeedback('Carregando projeto...', '');
+
+  try {
+    const { data: project, error: projectError } = await supabaseClient
+      .from('projetos')
+      .select('*')
+      .eq('id', projectId)
+      .eq('user_id', currentUser.id)
+      .single();
+
+    if (projectError) throw projectError;
+
+    const { data: calculation, error: calculationError } = await supabaseClient
+      .from('calculos_corte')
+      .select('*')
+      .eq('projeto_id', projectId)
+      .eq('user_id', currentUser.id)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (calculationError) throw calculationError;
+    if (!calculation) throw new Error('Nenhum cálculo de corte foi encontrado para este projeto.');
+
+    applySavedProjectToForm(project, calculation);
+    setSaveFeedback('Projeto carregado com sucesso.', 'success');
+  } catch (error) {
+    console.error('Erro completo ao abrir Projeto Livre:', error);
+    setSaveFeedback('Não foi possível abrir o projeto. Tente novamente.', 'error');
+  }
+}
+
+const savedProjectActions = {
+  open: openSavedProject,
+  update: null,
+  duplicate: null,
+  delete: null
+};
+
+function renderMyProjectsError() {
+  if (myProjectsList) myProjectsList.innerHTML = '<p class="saved-project-empty">Não foi possível carregar seus projetos agora.</p>';
+}
+
+async function loadMyProjects() {
+  if (!supabaseClient || !currentUser || !myProjectsList) return;
+  myProjectsList.innerHTML = '<p class="saved-project-empty">Carregando projetos...</p>';
+
+  const { data, error } = await supabaseClient
+    .from('projetos')
+    .select('id, nome, categoria, created_at')
+    .eq('user_id', currentUser.id)
+    .order('created_at', { ascending: false })
+    .limit(5);
+
+  if (error) throw error;
+
+  if (!data || data.length === 0) {
+    myProjectsList.innerHTML = '<p class="saved-project-empty">Nenhum projeto salvo ainda.</p>';
+    return;
+  }
+
+  myProjectsList.innerHTML = data.map(project => `
+    <article class="saved-project-item">
+      <strong>${escapeHtml(project.nome || 'Projeto sem nome')}</strong>
+      <span>${escapeHtml(project.categoria || 'Projeto Livre')} • ${formatProjectDate(project.created_at)}</span>
+      <button class="secondary-btn saved-project-open" type="button" data-project-id="${escapeHtml(project.id)}">Abrir</button>
+    </article>
+  `).join('');
+}
+
 function renderHaveResults(input, result) { /* unchanged simplified */
   if (result.piecesAcross <= 0 || result.totalPieces <= 0) { resultLeadEl.textContent = 'Com essas medidas, essa peça não cabe neste tecido.'; resultsEl.innerHTML = ''; comparisonEl.innerHTML = ''; lastSummary = '✂️ Resumo do corte\n\nEssa peça não coube no tecido informado.'; return; }
   resultLeadEl.innerHTML = `Com essas medidas, cabem <strong>${result.totalPieces} peça(s)</strong> neste tecido.`;
@@ -337,18 +670,12 @@ function clearRenderedResults(msg){resultLeadEl.innerHTML='';resultsEl.innerHTML
 
 function calculate() {
   if (currentMode === 'project') {
-    const input = {
-      projectName: document.querySelector('#projectName').value,
-      client: document.querySelector('#projectClient').value,
-      notes: document.querySelector('#projectNotes').value,
-      fabricWidth: getNumber('#projectFabricWidth'),
-      pricePerMeter: getNumber('#projectPricePerMeter'),
-      defaultMargin: getNumber('#projectDefaultMargin'),
-      defaultSpacing: getNumber('#projectDefaultSpacing'),
-      allowRotate: document.querySelector('#projectAllowRotate').checked
-    };
-    if (input.fabricWidth <= 0) { renderAlerts([{ type: 'danger', text: 'Informe a largura do tecido do Projeto Livre.' }]); clearRenderedResults('Corrija as medidas para calcular.'); return; }
-    const r = calculateProject(input); renderAlerts(r.alerts); renderProjectResults(input, r); previewEl.innerHTML = ''; summaryEl.textContent=lastSummary; summaryEl.classList.add('hidden'); copyButton.classList.remove('hidden'); return;
+    const input = getProjectInput();
+    if (input.fabricWidth <= 0) { renderAlerts([{ type: 'danger', text: 'Informe a largura do tecido do Projeto Livre.' }]); clearRenderedResults('Corrija as medidas para calcular.'); lastProjectInput = null; lastProjectResult = null; return; }
+    const r = calculateProject(input);
+    lastProjectInput = input;
+    lastProjectResult = r;
+    renderAlerts(r.alerts); renderProjectResults(input, r); previewEl.innerHTML = ''; summaryEl.textContent=lastSummary; summaryEl.classList.add('hidden'); copyButton.classList.remove('hidden'); return;
   }
   const input = getInputs();
   const errors = validateInputs(input);
@@ -413,5 +740,14 @@ if (closeAuthButton) closeAuthButton.addEventListener('click',()=>closeAuthModal
 if (loginButton) loginButton.addEventListener('click',()=>{ handleLogin().catch(error=>setAuthFeedback(error.message, true)); });
 if (signupButton) signupButton.addEventListener('click',()=>{ handleSignup().catch(error=>setAuthFeedback(error.message, true)); });
 if (logoutButton) logoutButton.addEventListener('click',()=>{ handleLogout().catch(error=>setAuthFeedback(error.message, true)); });
+if (saveProjectButton) saveProjectButton.addEventListener('click',()=>{ saveProject().catch(error=>{
+  console.error('Erro completo ao salvar Projeto Livre:', error);
+  setSaveFeedback('Não foi possível salvar o projeto. Tente novamente.', 'error');
+}); });
+if (myProjectsList) myProjectsList.addEventListener('click', event => {
+  const openButton = event.target.closest?.('.saved-project-open');
+  if (!openButton) return;
+  savedProjectActions.open(openButton.dataset.projectId);
+});
 
 initAuth().catch(()=>updateAuthUI());
