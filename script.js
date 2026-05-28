@@ -380,7 +380,7 @@ function renderProjectResults(input, result) {
 function buildProjectSummaryForSave(input, result) {
   const cutLines = result.items.map(item => {
     if (!item.fits) return `- ${item.cut.name}: não cabe na largura do tecido`;
-    return `- ${item.cut.name}: ${item.cut.quantity} un; corte ${formatPieceMeasure(item.cut.width, item.cut.length)}; margem ${formatCm(item.cut.margin)}; espaçamento ${formatCm(item.cut.spacing)}; ${item.rotated ? 'girado' : 'normal'}; medida final ${formatPieceMeasure(item.finalWidth, item.finalLength)}; ${item.piecesAcross} por faixa; ${item.rowsNeeded} fileira(s); comprimento ${formatCm(item.neededLength)}${input.pricePerMeter > 0 ? `; custo ${moneyFormatter.format(item.itemCost)}` : ''}`;
+    return `- ${item.cut.name}: ${item.cut.quantity} un; corte ${formatPieceMeasure(item.cut.width, item.cut.length)}; margem ${formatCm(item.cut.margin)}; espaçamento ${formatCm(item.cut.spacing)}; permitir girar: ${item.cut.allowRotate ? 'sim' : 'não'}; ${item.rotated ? 'girado' : 'normal'}; medida final ${formatPieceMeasure(item.finalWidth, item.finalLength)}; ${item.piecesAcross} por faixa; ${item.rowsNeeded} fileira(s); comprimento ${formatCm(item.neededLength)}${input.pricePerMeter > 0 ? `; custo ${moneyFormatter.format(item.itemCost)}` : ''}`;
   });
 
   return `${lastSummary}\n\nItens detalhados:\n${cutLines.join('\n') || '- Nenhum corte válido informado.'}`;
@@ -463,6 +463,144 @@ function formatProjectDate(value) {
   return new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(value));
 }
 
+function formatInputNumber(value) {
+  return value === null || value === undefined || value === '' ? '' : String(value);
+}
+
+function parseSavedNumber(value) {
+  if (value === null || value === undefined) return 0;
+  const normalized = String(value).replace(/[^0-9,.-]/g, '').replace(',', '.');
+  const number = Number(normalized);
+  return Number.isFinite(number) ? number : 0;
+}
+
+function parseSavedBoolean(value) {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'string') return ['true', 't', '1', 'sim', 'yes'].includes(value.toLowerCase());
+  return Boolean(value);
+}
+
+function getSummaryField(summary, label) {
+  const match = String(summary || '').match(new RegExp(`^${label}:\\s*(.*)$`, 'mi'));
+  if (!match) return '';
+  const value = match[1].trim();
+  return value === '-' ? '' : value;
+}
+
+function setFieldValue(selector, value) {
+  const field = document.querySelector(selector);
+  if (field) field.value = formatInputNumber(value);
+}
+
+function setFieldChecked(selector, value) {
+  const field = document.querySelector(selector);
+  if (field) field.checked = Boolean(value);
+}
+
+function parseProjectCutsFromSummary(summary, defaultMargin, defaultSpacing, defaultAllowRotate) {
+  const details = String(summary || '').split('Itens detalhados:')[1] || '';
+  return details
+    .split('\n')
+    .map(line => line.trim())
+    .filter(line => line.startsWith('- '))
+    .map(line => {
+      const match = line.match(/^- (.*?): (\d+) un; corte ([\d.,]+) x ([\d.,]+) cm; margem ([\d.,]+) cm; espaçamento ([\d.,]+) cm; (?:(?:permitir girar: (sim|não); )?)(girado|normal)/i);
+      if (!match) return null;
+      const allowRotateText = match[7];
+      const orientation = match[8];
+      return {
+        name: match[1],
+        quantity: Math.max(1, Math.floor(parseSavedNumber(match[2]))),
+        width: parseSavedNumber(match[3]),
+        length: parseSavedNumber(match[4]),
+        margin: parseSavedNumber(match[5]),
+        spacing: parseSavedNumber(match[6]),
+        allowRotate: allowRotateText ? allowRotateText.toLowerCase() === 'sim' : (defaultAllowRotate || orientation === 'girado')
+      };
+    })
+    .filter(Boolean);
+}
+
+function replaceProjectCutRows(cuts) {
+  if (!projectCutsList || typeof projectCutsList.insertAdjacentHTML !== 'function') return;
+  projectCutsList.innerHTML = '';
+  const rowsToRender = cuts.length > 0 ? cuts : [{}];
+
+  rowsToRender.forEach(cut => {
+    projectCutsList.insertAdjacentHTML('beforeend', createProjectCutRow());
+    const row = projectCutsList.querySelector('.project-cut-row:last-child');
+    if (!row) return;
+    row.querySelector('.project-cut-name').value = cut.name || '';
+    row.querySelector('.project-cut-width').value = formatInputNumber(cut.width ?? '');
+    row.querySelector('.project-cut-length').value = formatInputNumber(cut.length ?? '');
+    row.querySelector('.project-cut-qty').value = formatInputNumber(cut.quantity ?? 1);
+    row.querySelector('.project-cut-margin').value = formatInputNumber(cut.margin ?? '');
+    row.querySelector('.project-cut-spacing').value = formatInputNumber(cut.spacing ?? '');
+    row.querySelector('.project-cut-rotate').checked = Boolean(cut.allowRotate);
+  });
+}
+
+function applySavedProjectToForm(project, calculation) {
+  const summary = calculation?.resumo || '';
+  const defaultMargin = parseSavedNumber(calculation?.margem_costura_cm);
+  const defaultSpacing = parseSavedNumber(calculation?.espacamento_cm);
+  const defaultAllowRotate = parseSavedBoolean(calculation?.permitir_girar);
+
+  setMode('project');
+  setFieldValue('#projectName', project?.nome || calculation?.nome || getSummaryField(summary, 'Projeto'));
+  setFieldValue('#projectClient', project?.cliente || project?.nome_cliente || getSummaryField(summary, 'Cliente'));
+  setFieldValue('#projectNotes', project?.observacoes || calculation?.observacoes || getSummaryField(summary, 'Observações'));
+  setFieldValue('#projectFabricWidth', calculation?.largura_tecido_cm || parseSavedNumber(getSummaryField(summary, 'Largura do tecido')));
+  setFieldValue('#projectPricePerMeter', calculation?.preco_metro_linear || calculation?.preco_tecido || '');
+  setFieldValue('#projectDefaultMargin', defaultMargin);
+  setFieldValue('#projectDefaultSpacing', defaultSpacing);
+  setFieldChecked('#projectAllowRotate', defaultAllowRotate);
+
+  replaceProjectCutRows(parseProjectCutsFromSummary(summary, defaultMargin, defaultSpacing, defaultAllowRotate));
+  calculate();
+}
+
+async function openSavedProject(projectId) {
+  if (!supabaseClient || !currentUser || !projectId) return;
+  setSaveFeedback('Carregando projeto...', '');
+
+  try {
+    const { data: project, error: projectError } = await supabaseClient
+      .from('projetos')
+      .select('*')
+      .eq('id', projectId)
+      .eq('user_id', currentUser.id)
+      .single();
+
+    if (projectError) throw projectError;
+
+    const { data: calculation, error: calculationError } = await supabaseClient
+      .from('calculos_corte')
+      .select('*')
+      .eq('projeto_id', projectId)
+      .eq('user_id', currentUser.id)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (calculationError) throw calculationError;
+    if (!calculation) throw new Error('Nenhum cálculo de corte foi encontrado para este projeto.');
+
+    applySavedProjectToForm(project, calculation);
+    setSaveFeedback('Projeto carregado com sucesso.', 'success');
+  } catch (error) {
+    console.error('Erro completo ao abrir Projeto Livre:', error);
+    setSaveFeedback('Não foi possível abrir o projeto. Tente novamente.', 'error');
+  }
+}
+
+const savedProjectActions = {
+  open: openSavedProject,
+  update: null,
+  duplicate: null,
+  delete: null
+};
+
 function renderMyProjectsError() {
   if (myProjectsList) myProjectsList.innerHTML = '<p class="saved-project-empty">Não foi possível carregar seus projetos agora.</p>';
 }
@@ -489,6 +627,7 @@ async function loadMyProjects() {
     <article class="saved-project-item">
       <strong>${escapeHtml(project.nome || 'Projeto sem nome')}</strong>
       <span>${escapeHtml(project.categoria || 'Projeto Livre')} • ${formatProjectDate(project.created_at)}</span>
+      <button class="secondary-btn saved-project-open" type="button" data-project-id="${escapeHtml(project.id)}">Abrir</button>
     </article>
   `).join('');
 }
@@ -605,5 +744,10 @@ if (saveProjectButton) saveProjectButton.addEventListener('click',()=>{ saveProj
   console.error('Erro completo ao salvar Projeto Livre:', error);
   setSaveFeedback('Não foi possível salvar o projeto. Tente novamente.', 'error');
 }); });
+if (myProjectsList) myProjectsList.addEventListener('click', event => {
+  const openButton = event.target.closest?.('.saved-project-open');
+  if (!openButton) return;
+  savedProjectActions.open(openButton.dataset.projectId);
+});
 
 initAuth().catch(()=>updateAuthUI());

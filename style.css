@@ -535,6 +535,7 @@ footer {
 }
 .saved-project-item strong { display: block; color: var(--text); }
 .saved-project-item span { display: block; color: var(--muted); font-size: 13px; margin-top: 4px; }
+.saved-project-open { margin-top: 10px; }
 .saved-project-empty { color: var(--muted); }
 
 
