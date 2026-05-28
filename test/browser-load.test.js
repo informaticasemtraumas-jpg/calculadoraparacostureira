@@ -54,6 +54,7 @@ function createBrowserContext() {
     'fabricPrice',
     'boughtLength',
     'allowRotate'
+    ,'saveGate','saveProjectButton','saveProjectFeedback','myProjectsSection','myProjectsList'
     ,'projectModeSection','simpleModeSection','fabricSection','pieceSection','costSection','sheetModeSection','mattressType','mattressWidth','mattressLength','mattressHeight','underturnAllowance','sheetFabricWidth','projectCutsList','addProjectCutButton','projectFabricWidth','projectPricePerMeter','projectDefaultMargin','projectDefaultSpacing','projectAllowRotate','projectName','projectClient','projectNotes'
   ];
 
