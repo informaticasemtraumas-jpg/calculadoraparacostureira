@@ -242,8 +242,16 @@
         <button class="secondary-btn hidden" type="button" id="copyButton" style="margin-top: 14px; width: 100%;">
           Copiar resumo
         </button>
+        <button class="primary-btn" type="button" id="saveProjectButton" style="margin-top: 10px; width: 100%;">
+          Salvar projeto
+        </button>
+        <div id="saveProjectFeedback" class="save-feedback" role="status" aria-live="polite"></div>
         <div class="summary hidden" id="summary">Preencha as medidas e clique em calcular.</div>
-        <div id="saveGate" class="guest-gate">Crie uma conta gratuita para salvar seus cálculos.</div>
+        <div id="saveGate" class="guest-gate">Crie uma conta gratuita para salvar seus projetos.</div>
+        <section id="myProjectsSection" class="my-projects hidden" aria-labelledby="myProjectsTitle">
+          <h3 id="myProjectsTitle">Meus Projetos</h3>
+          <div id="myProjectsList" class="my-projects-list">Entre para ver seus projetos salvos.</div>
+        </section>
       </aside>
     </div>
 

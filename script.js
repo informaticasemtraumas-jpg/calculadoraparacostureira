@@ -15,6 +15,10 @@ const authPassword = document.querySelector('#authPassword');
 const loginButton = document.querySelector('#loginButton');
 const signupButton = document.querySelector('#signupButton');
 const saveGate = document.querySelector('#saveGate');
+const saveProjectButton = document.querySelector('#saveProjectButton');
+const saveProjectFeedback = document.querySelector('#saveProjectFeedback');
+const myProjectsSection = document.querySelector('#myProjectsSection');
+const myProjectsList = document.querySelector('#myProjectsList');
 
 function setAuthFeedback(text, isError) {
   if (!authFeedback) return;
@@ -22,6 +26,104 @@ function setAuthFeedback(text, isError) {
   authFeedback.style.color = isError ? 'var(--danger)' : 'var(--muted)';
 }
 
+function setSaveFeedback(text, type = '') {
+  if (!saveProjectFeedback) return;
+  saveProjectFeedback.textContent = text || '';
+  saveProjectFeedback.classList.remove('success', 'error');
+  if (type) saveProjectFeedback.classList.add(type);
+}
+
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;');
+}
+
+function getProjectInput() {
+  return {
+    projectName: document.querySelector('#projectName').value.trim(),
+    client: document.querySelector('#projectClient').value.trim(),
+    notes: document.querySelector('#projectNotes').value.trim(),
+    fabricWidth: getNumber('#projectFabricWidth'),
+    pricePerMeter: getNumber('#projectPricePerMeter'),
+    defaultMargin: getNumber('#projectDefaultMargin'),
+    defaultSpacing: getNumber('#projectDefaultSpacing'),
+    allowRotate: document.querySelector('#projectAllowRotate').checked
+  };
+}
+
+function getColumnFromSchemaError(error) {
+  const message = `${error?.message || ''} ${error?.details || ''} ${error?.hint || ''}`;
+  const quotedMatch = message.match(/'([^']+)' column/);
+  if (quotedMatch) return quotedMatch[1];
+  const plainMatch = message.match(/column ([a-zA-Z0-9_]+) /);
+  return plainMatch ? plainMatch[1] : '';
+}
+
+async function runWithAvailableColumns(tableName, payload, operation, selectColumns = '*') {
+  let nextPayload = { ...payload };
+  const removedColumns = new Set();
+
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    const { data, error } = await operation(nextPayload).select(selectColumns).single();
+
+    if (!error) return data;
+
+    const missingColumn = getColumnFromSchemaError(error);
+    if (!missingColumn || removedColumns.has(missingColumn) || !(missingColumn in nextPayload)) {
+      throw error;
+    }
+
+    removedColumns.add(missingColumn);
+    const { [missingColumn]: _removedValue, ...payloadWithoutMissingColumn } = nextPayload;
+    nextPayload = payloadWithoutMissingColumn;
+    console.warn(`Campo ${missingColumn} não encontrado em ${tableName}; tentando salvar sem esse campo.`);
+  }
+
+  throw new Error(`Não foi possível salvar em ${tableName}: muitas tentativas de ajuste de colunas.`);
+}
+
+async function insertWithAvailableColumns(tableName, payload, selectColumns = '*') {
+  return runWithAvailableColumns(
+    tableName,
+    payload,
+    nextPayload => supabaseClient.from(tableName).insert(nextPayload),
+    selectColumns
+  );
+}
+
+async function updateWithAvailableColumns(tableName, payload, matchColumns, selectColumns = '*') {
+  return runWithAvailableColumns(
+    tableName,
+    payload,
+    nextPayload => supabaseClient.from(tableName).update(nextPayload).match(matchColumns),
+    selectColumns
+  );
+}
+
+
+function updateSaveProjectButtonText() {
+  if (!saveProjectButton || isSavingProject) return;
+  saveProjectButton.textContent = projetoAtualId ? 'Salvar alterações' : 'Salvar projeto';
+}
+
+function setCurrentProjectState(projectId = null, calculationId = null) {
+  projetoAtualId = projectId;
+  calculoAtualId = calculationId;
+  updateSaveProjectButtonText();
+}
+
+function resetCurrentProjectState() {
+  setCurrentProjectState(null, null);
+}
+
+function clearProjectEditingState() {
+  resetCurrentProjectState();
+  setSaveFeedback('', '');
+}
 
 function clearAuthForm() {
   if (authName) authName.value = '';
@@ -43,12 +145,20 @@ function updateAuthUI() {
     authStatusEl.textContent = `Logada como: ${name} (${currentUser.email})`;
     openAuthButton.classList.add('hidden');
     logoutButton.classList.remove('hidden');
-    if (saveGate) saveGate.textContent = 'Sessão ativa. Salvamento será habilitado na próxima etapa.';
+    if (saveGate) saveGate.textContent = 'Você pode salvar seus Projetos Livres nesta conta.';
+    if (myProjectsSection) myProjectsSection.classList.remove('hidden');
+    loadMyProjects().catch(error => {
+      console.error('Erro ao carregar projetos salvos:', error);
+      renderMyProjectsError();
+    });
   } else {
+    resetCurrentProjectState();
     authStatusEl.textContent = 'Modo visitante';
     openAuthButton.classList.remove('hidden');
     logoutButton.classList.add('hidden');
-    if (saveGate) saveGate.textContent = 'Crie uma conta gratuita para salvar seus cálculos.';
+    if (saveGate) saveGate.textContent = 'Crie uma conta gratuita para salvar seus projetos.';
+    if (myProjectsSection) myProjectsSection.classList.add('hidden');
+    if (myProjectsList) myProjectsList.innerHTML = 'Entre para ver seus projetos salvos.';
   }
 }
 
@@ -94,6 +204,7 @@ async function handleLogout() {
   if (!supabaseClient) return;
   await supabaseClient.auth.signOut();
   currentUser = null;
+  resetCurrentProjectState();
   updateAuthUI();
 }
 
@@ -110,6 +221,11 @@ async function initAuth() {
 let currentMode = 'project';
 let simpleMode = 'have';
 let lastSummary = '';
+let lastProjectInput = null;
+let lastProjectResult = null;
+let isSavingProject = false;
+let projetoAtualId = null;
+let calculoAtualId = null;
 
 const comparisonWidths = [115, 120, 140, 150, 160, 180, 250, 300];
 
@@ -281,6 +397,64 @@ function calculateProject(input) {
   return { items, alerts, totalLengthCm, totalQty, totalCost, suggestedLength: roundUpPurchaseLength(totalLengthCm), notFitting };
 }
 
+function getProjectPreviewColor(index) {
+  const colors = ['#f9d8cf', '#d8e8ff', '#def3df', '#f7e2b7', '#eadcff', '#d9f2f0', '#ffdceb', '#e7ecff'];
+  return colors[index % colors.length];
+}
+
+function renderProjectVisualPreview(input, result) {
+  if (!previewEl) return;
+
+  const fittingItems = result.items.filter(item => item.fits);
+  const notFittingItems = result.items.filter(item => !item.fits);
+
+  if (!fittingItems.length) {
+    previewEl.innerHTML = `<section class="layout-preview project-visual-preview"><h3>Visualização do projeto</h3><p class="preview-note">Informe cortes que caibam na largura do tecido para ver uma visualização aproximada.</p>${notFittingItems.length ? `<div class="project-preview-alert">Itens fora da largura: ${escapeHtml(notFittingItems.map(item => item.cut.name).join(', '))}.</div>` : ''}</section>`;
+    return;
+  }
+
+  const totalLength = Math.max(result.totalLengthCm, 1);
+  const previewHeight = Math.max(220, Math.min(520, (totalLength / Math.max(input.fabricWidth, 1)) * 220));
+  const totalPieces = fittingItems.reduce((sum, item) => sum + item.cut.quantity, 0);
+  const compact = totalPieces > 80 || fittingItems.length > 8;
+
+  const strips = fittingItems.map((item, index) => {
+    const renderedPieces = Math.min(item.cut.quantity, compact ? 24 : 60);
+    const omittedPieces = item.cut.quantity - renderedPieces;
+    const stripHeight = Math.max(compact ? 58 : 72, (item.neededLength / totalLength) * previewHeight);
+    let pieces = '';
+
+    for (let pieceIndex = 0; pieceIndex < renderedPieces; pieceIndex += 1) {
+      pieces += `<span class="project-preview-piece" title="${escapeHtml(item.cut.name)} ${pieceIndex + 1}"><strong>${escapeHtml(item.cut.name)}</strong><small>${pieceIndex + 1}/${item.cut.quantity}</small></span>`;
+    }
+
+    return `<div class="project-preview-strip" style="--item-color:${getProjectPreviewColor(index)}; --pieces-across:${Math.max(item.piecesAcross, 1)}; min-height:${round(stripHeight)}px;">
+      <div class="project-preview-strip-header">
+        <strong>${escapeHtml(item.cut.name)}</strong>
+        <span>${item.cut.quantity} un • ${formatPieceMeasure(item.finalWidth, item.finalLength)} • ${item.piecesAcross} por faixa • ${item.rowsNeeded} fileira(s)</span>
+      </div>
+      <div class="project-preview-grid">${pieces}${omittedPieces > 0 ? `<span class="project-preview-more">+${omittedPieces}</span>` : ''}</div>
+    </div>`;
+  }).join('');
+
+  const notFittingAlert = notFittingItems.length
+    ? `<div class="project-preview-alert">Não desenhado dentro do tecido: ${escapeHtml(notFittingItems.map(item => item.cut.name).join(', '))}, pois não cabe na largura informada.</div>`
+    : '';
+
+  previewEl.innerHTML = `<section class="layout-preview project-visual-preview">
+    <h3>Visualização do projeto</h3>
+    <p>Visualização aproximada para facilitar o entendimento. O cálculo numérico continua sendo a referência.</p>
+    ${notFittingAlert}
+    <div class="project-fabric-measure top">Largura do tecido: ${formatCm(input.fabricWidth)}</div>
+    <div class="project-fabric-wrap">
+      <div class="project-fabric-canvas" style="height:${round(previewHeight)}px;">
+        ${strips}
+      </div>
+    </div>
+    <div class="project-fabric-measure bottom">Comprimento total usado: ${formatCm(result.totalLengthCm)} (${formatMeters(result.totalLengthCm)})</div>
+  </section>`;
+}
+
 function renderProjectResults(input, result) {
   const totalCuts = result.items.length;
   const costItem = input.pricePerMeter > 0 ? renderResultItem(moneyFormatter.format(result.totalCost), 'Custo estimado total') : '';
@@ -295,8 +469,313 @@ function renderProjectResults(input, result) {
     ? `<div class="result-item"><strong>${item.cut.name}</strong><span>Qtd: ${item.cut.quantity} • Medida final: ${formatPieceMeasure(item.finalWidth,item.finalLength)} • ${item.piecesAcross} por faixa • ${item.rowsNeeded} fileiras • ${formatCm(item.neededLength)}${input.pricePerMeter>0?` • ${moneyFormatter.format(item.itemCost)}`:''}</span></div>`
     : `<div class="result-item"><strong>${item.cut.name}</strong><span>Não cabe na largura do tecido.</span></div>`).join('');
   comparisonEl.innerHTML = `<details class="project-details"><summary>Ver detalhes dos cortes</summary><div class="details-list">${itemLines || '<p>Nenhum corte válido informado.</p>'}</div></details>`;
+  renderProjectVisualPreview(input, result);
   resultLeadEl.textContent = `Projeto ${input.projectName || 'sem nome'}: total estimado de ${formatMeters(result.totalLengthCm)} de tecido.`;
   lastSummary = `📋 Projeto Livre\nProjeto: ${input.projectName || 'Sem nome'}\nCliente: ${input.client || '-'}\nObservações: ${input.notes || '-'}\nLargura do tecido: ${formatCm(input.fabricWidth)}\n\nCortes:\n${result.items.map(item=> item.fits ? `- ${item.cut.name}: ${item.cut.quantity} un, ${formatCm(item.neededLength)}` : `- ${item.cut.name}: não cabe`).join('\n')}\n\nTotal: ${formatCm(result.totalLengthCm)} (${formatMeters(result.totalLengthCm)})\nSugestão: ${formatSuggestedLength(result.suggestedLength)}${input.pricePerMeter>0?`\nCusto estimado: ${moneyFormatter.format(result.totalCost)}`:''}`;
+}
+
+function buildProjectSummaryForSave(input, result) {
+  const cutLines = result.items.map(item => {
+    if (!item.fits) return `- ${item.cut.name}: não cabe na largura do tecido`;
+    return `- ${item.cut.name}: ${item.cut.quantity} un; corte ${formatPieceMeasure(item.cut.width, item.cut.length)}; margem ${formatCm(item.cut.margin)}; espaçamento ${formatCm(item.cut.spacing)}; permitir girar: ${item.cut.allowRotate ? 'sim' : 'não'}; ${item.rotated ? 'girado' : 'normal'}; medida final ${formatPieceMeasure(item.finalWidth, item.finalLength)}; ${item.piecesAcross} por faixa; ${item.rowsNeeded} fileira(s); comprimento ${formatCm(item.neededLength)}${input.pricePerMeter > 0 ? `; custo ${moneyFormatter.format(item.itemCost)}` : ''}`;
+  });
+
+  return `${lastSummary}\n\nItens detalhados:\n${cutLines.join('\n') || '- Nenhum corte válido informado.'}`;
+}
+
+function buildProjectPayload(input, includeUpdatedAt = false) {
+  return {
+    nome: input.projectName || 'Projeto Livre sem nome',
+    categoria: 'Projeto Livre',
+    observacoes: input.notes || null,
+    ...(includeUpdatedAt ? { updated_at: new Date().toISOString() } : {})
+  };
+}
+
+function buildCalculationPayload(input, result, projectId, resumo, includeUpdatedAt = false) {
+  return {
+    user_id: currentUser.id,
+    projeto_id: projectId,
+    nome: input.projectName || 'Projeto Livre sem nome',
+    tipo_calculo: 'projeto_livre',
+    modo_calculo: 'projeto_livre',
+    largura_tecido_cm: input.fabricWidth,
+    preco_metro_linear: input.pricePerMeter || null,
+    preco_tecido: input.pricePerMeter || null,
+    margem_costura_cm: input.defaultMargin,
+    espacamento_cm: input.defaultSpacing,
+    permitir_girar: input.allowRotate,
+    quantidade_desejada: result.totalQty || null,
+    comprimento_necessario_cm: result.totalLengthCm,
+    custo_estimado_total: result.totalCost || null,
+    resumo,
+    ...(includeUpdatedAt ? { updated_at: new Date().toISOString() } : {})
+  };
+}
+
+async function createSavedProject(input, result, resumo) {
+  const project = await insertWithAvailableColumns('projetos', {
+    user_id: currentUser.id,
+    ...buildProjectPayload(input)
+  }, 'id, nome, categoria, created_at');
+
+  const calculation = await insertWithAvailableColumns('calculos_corte',
+    buildCalculationPayload(input, result, project.id, resumo),
+    'id'
+  );
+
+  setCurrentProjectState(project.id, calculation?.id || null);
+  return 'Projeto salvo com sucesso.';
+}
+
+async function updateSavedProject(input, result, resumo) {
+  await updateWithAvailableColumns('projetos',
+    buildProjectPayload(input, true),
+    { id: projetoAtualId, user_id: currentUser.id },
+    'id'
+  );
+
+  if (calculoAtualId) {
+    const calculation = await updateWithAvailableColumns('calculos_corte',
+      buildCalculationPayload(input, result, projetoAtualId, resumo, true),
+      { id: calculoAtualId, projeto_id: projetoAtualId, user_id: currentUser.id },
+      'id'
+    );
+    calculoAtualId = calculation?.id || calculoAtualId;
+  } else {
+    const calculation = await insertWithAvailableColumns('calculos_corte',
+      buildCalculationPayload(input, result, projetoAtualId, resumo),
+      'id'
+    );
+    calculoAtualId = calculation?.id || null;
+  }
+
+  updateSaveProjectButtonText();
+  return 'Projeto atualizado com sucesso.';
+}
+
+async function saveProject() {
+  if (isSavingProject) return;
+  if (currentMode !== 'project') {
+    setSaveFeedback('O salvamento está disponível para Projeto Livre.', 'error');
+    return;
+  }
+  if (!supabaseClient) {
+    setSaveFeedback('Configure o Supabase para salvar seus projetos.', 'error');
+    return;
+  }
+  if (!currentUser) {
+    setSaveFeedback('Crie uma conta gratuita para salvar seus projetos.', 'error');
+    return;
+  }
+
+  calculate();
+  const input = lastProjectInput;
+  const result = lastProjectResult;
+  if (!input || !result || input.fabricWidth <= 0) {
+    setSaveFeedback('Calcule um Projeto Livre válido antes de salvar.', 'error');
+    return;
+  }
+
+  isSavingProject = true;
+  if (saveProjectButton) {
+    saveProjectButton.disabled = true;
+    saveProjectButton.textContent = 'Salvando...';
+  }
+  setSaveFeedback('', '');
+
+  try {
+    const resumo = buildProjectSummaryForSave(input, result);
+    const successMessage = projetoAtualId
+      ? await updateSavedProject(input, result, resumo)
+      : await createSavedProject(input, result, resumo);
+
+    setSaveFeedback(successMessage, 'success');
+    await loadMyProjects();
+  } catch (error) {
+    console.error('Erro completo ao salvar Projeto Livre:', error);
+    setSaveFeedback('Não foi possível salvar o projeto. Tente novamente.', 'error');
+  } finally {
+    isSavingProject = false;
+    if (saveProjectButton) {
+      saveProjectButton.disabled = false;
+      updateSaveProjectButtonText();
+    }
+  }
+}
+
+function formatProjectDate(value) {
+  if (!value) return 'Data não informada';
+  return new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(value));
+}
+
+function formatInputNumber(value) {
+  return value === null || value === undefined || value === '' ? '' : String(value);
+}
+
+function parseSavedNumber(value) {
+  if (value === null || value === undefined) return 0;
+  const normalized = String(value).replace(/[^0-9,.-]/g, '').replace(',', '.');
+  const number = Number(normalized);
+  return Number.isFinite(number) ? number : 0;
+}
+
+function parseSavedBoolean(value) {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'string') return ['true', 't', '1', 'sim', 'yes'].includes(value.toLowerCase());
+  return Boolean(value);
+}
+
+function getSummaryField(summary, label) {
+  const match = String(summary || '').match(new RegExp(`^${label}:\\s*(.*)$`, 'mi'));
+  if (!match) return '';
+  const value = match[1].trim();
+  return value === '-' ? '' : value;
+}
+
+function setFieldValue(selector, value) {
+  const field = document.querySelector(selector);
+  if (field) field.value = formatInputNumber(value);
+}
+
+function setFieldChecked(selector, value) {
+  const field = document.querySelector(selector);
+  if (field) field.checked = Boolean(value);
+}
+
+function parseProjectCutsFromSummary(summary, defaultMargin, defaultSpacing, defaultAllowRotate) {
+  const details = String(summary || '').split('Itens detalhados:')[1] || '';
+  return details
+    .split('\n')
+    .map(line => line.trim())
+    .filter(line => line.startsWith('- '))
+    .map(line => {
+      const match = line.match(/^- (.*?): (\d+) un; corte ([\d.,]+) x ([\d.,]+) cm; margem ([\d.,]+) cm; espaçamento ([\d.,]+) cm; (?:(?:permitir girar: (sim|não); )?)(girado|normal)/i);
+      if (!match) return null;
+      const allowRotateText = match[7];
+      const orientation = match[8];
+      return {
+        name: match[1],
+        quantity: Math.max(1, Math.floor(parseSavedNumber(match[2]))),
+        width: parseSavedNumber(match[3]),
+        length: parseSavedNumber(match[4]),
+        margin: parseSavedNumber(match[5]),
+        spacing: parseSavedNumber(match[6]),
+        allowRotate: allowRotateText ? allowRotateText.toLowerCase() === 'sim' : (defaultAllowRotate || orientation === 'girado')
+      };
+    })
+    .filter(Boolean);
+}
+
+function replaceProjectCutRows(cuts) {
+  if (!projectCutsList || typeof projectCutsList.insertAdjacentHTML !== 'function') return;
+  projectCutsList.innerHTML = '';
+  const rowsToRender = cuts.length > 0 ? cuts : [{}];
+
+  rowsToRender.forEach(cut => {
+    projectCutsList.insertAdjacentHTML('beforeend', createProjectCutRow());
+    const row = projectCutsList.querySelector('.project-cut-row:last-child');
+    if (!row) return;
+    row.querySelector('.project-cut-name').value = cut.name || '';
+    row.querySelector('.project-cut-width').value = formatInputNumber(cut.width ?? '');
+    row.querySelector('.project-cut-length').value = formatInputNumber(cut.length ?? '');
+    row.querySelector('.project-cut-qty').value = formatInputNumber(cut.quantity ?? 1);
+    row.querySelector('.project-cut-margin').value = formatInputNumber(cut.margin ?? '');
+    row.querySelector('.project-cut-spacing').value = formatInputNumber(cut.spacing ?? '');
+    row.querySelector('.project-cut-rotate').checked = Boolean(cut.allowRotate);
+  });
+}
+
+function applySavedProjectToForm(project, calculation) {
+  const summary = calculation?.resumo || '';
+  const defaultMargin = parseSavedNumber(calculation?.margem_costura_cm);
+  const defaultSpacing = parseSavedNumber(calculation?.espacamento_cm);
+  const defaultAllowRotate = parseSavedBoolean(calculation?.permitir_girar);
+
+  setMode('project');
+  setFieldValue('#projectName', project?.nome || calculation?.nome || getSummaryField(summary, 'Projeto'));
+  setFieldValue('#projectClient', project?.cliente || project?.nome_cliente || getSummaryField(summary, 'Cliente'));
+  setFieldValue('#projectNotes', project?.observacoes || calculation?.observacoes || getSummaryField(summary, 'Observações'));
+  setFieldValue('#projectFabricWidth', calculation?.largura_tecido_cm || parseSavedNumber(getSummaryField(summary, 'Largura do tecido')));
+  setFieldValue('#projectPricePerMeter', calculation?.preco_metro_linear || calculation?.preco_tecido || '');
+  setFieldValue('#projectDefaultMargin', defaultMargin);
+  setFieldValue('#projectDefaultSpacing', defaultSpacing);
+  setFieldChecked('#projectAllowRotate', defaultAllowRotate);
+
+  replaceProjectCutRows(parseProjectCutsFromSummary(summary, defaultMargin, defaultSpacing, defaultAllowRotate));
+  calculate();
+}
+
+async function openSavedProject(projectId) {
+  if (!supabaseClient || !currentUser || !projectId) return;
+  setSaveFeedback('Carregando projeto...', '');
+
+  try {
+    const { data: project, error: projectError } = await supabaseClient
+      .from('projetos')
+      .select('*')
+      .eq('id', projectId)
+      .eq('user_id', currentUser.id)
+      .single();
+
+    if (projectError) throw projectError;
+
+    const { data: calculation, error: calculationError } = await supabaseClient
+      .from('calculos_corte')
+      .select('*')
+      .eq('projeto_id', projectId)
+      .eq('user_id', currentUser.id)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (calculationError) throw calculationError;
+
+    applySavedProjectToForm(project, calculation || {});
+    setCurrentProjectState(project.id, calculation?.id || null);
+    setSaveFeedback('Projeto carregado com sucesso.', 'success');
+  } catch (error) {
+    console.error('Erro completo ao abrir Projeto Livre:', error);
+    setSaveFeedback('Não foi possível abrir o projeto. Tente novamente.', 'error');
+  }
+}
+
+const savedProjectActions = {
+  open: openSavedProject,
+  update: null,
+  duplicate: null,
+  delete: null
+};
+
+function renderMyProjectsError() {
+  if (myProjectsList) myProjectsList.innerHTML = '<p class="saved-project-empty">Não foi possível carregar seus projetos agora.</p>';
+}
+
+async function loadMyProjects() {
+  if (!supabaseClient || !currentUser || !myProjectsList) return;
+  myProjectsList.innerHTML = '<p class="saved-project-empty">Carregando projetos...</p>';
+
+  const { data, error } = await supabaseClient
+    .from('projetos')
+    .select('id, nome, categoria, created_at')
+    .eq('user_id', currentUser.id)
+    .order('created_at', { ascending: false })
+    .limit(5);
+
+  if (error) throw error;
+
+  if (!data || data.length === 0) {
+    myProjectsList.innerHTML = '<p class="saved-project-empty">Nenhum projeto salvo ainda.</p>';
+    return;
+  }
+
+  myProjectsList.innerHTML = data.map(project => `
+    <article class="saved-project-item">
+      <strong>${escapeHtml(project.nome || 'Projeto sem nome')}</strong>
+      <span>${escapeHtml(project.categoria || 'Projeto Livre')} • ${formatProjectDate(project.created_at)}</span>
+      <button class="secondary-btn saved-project-open" type="button" data-project-id="${escapeHtml(project.id)}">Abrir</button>
+    </article>
+  `).join('');
 }
 
 function renderHaveResults(input, result) { /* unchanged simplified */
@@ -337,18 +816,12 @@ function clearRenderedResults(msg){resultLeadEl.innerHTML='';resultsEl.innerHTML
 
 function calculate() {
   if (currentMode === 'project') {
-    const input = {
-      projectName: document.querySelector('#projectName').value,
-      client: document.querySelector('#projectClient').value,
-      notes: document.querySelector('#projectNotes').value,
-      fabricWidth: getNumber('#projectFabricWidth'),
-      pricePerMeter: getNumber('#projectPricePerMeter'),
-      defaultMargin: getNumber('#projectDefaultMargin'),
-      defaultSpacing: getNumber('#projectDefaultSpacing'),
-      allowRotate: document.querySelector('#projectAllowRotate').checked
-    };
-    if (input.fabricWidth <= 0) { renderAlerts([{ type: 'danger', text: 'Informe a largura do tecido do Projeto Livre.' }]); clearRenderedResults('Corrija as medidas para calcular.'); return; }
-    const r = calculateProject(input); renderAlerts(r.alerts); renderProjectResults(input, r); previewEl.innerHTML = ''; summaryEl.textContent=lastSummary; summaryEl.classList.add('hidden'); copyButton.classList.remove('hidden'); return;
+    const input = getProjectInput();
+    if (input.fabricWidth <= 0) { renderAlerts([{ type: 'danger', text: 'Informe a largura do tecido do Projeto Livre.' }]); clearRenderedResults('Corrija as medidas para calcular.'); lastProjectInput = null; lastProjectResult = null; return; }
+    const r = calculateProject(input);
+    lastProjectInput = input;
+    lastProjectResult = r;
+    renderAlerts(r.alerts); renderProjectResults(input, r); summaryEl.textContent=lastSummary; summaryEl.classList.add('hidden'); copyButton.classList.remove('hidden'); return;
   }
   const input = getInputs();
   const errors = validateInputs(input);
@@ -400,10 +873,10 @@ copyButton.addEventListener('click', async ()=>{try{await navigator.clipboard.wr
 if (projectCutsList && typeof projectCutsList.insertAdjacentHTML === 'function') {
   addProjectCutButton.addEventListener('click',()=>{projectCutsList.insertAdjacentHTML('beforeend', createProjectCutRow());calculate();});
   projectCutsList.addEventListener('click',(event)=>{if(event.target.classList.contains('project-remove-cut')){event.target.closest('.project-cut-row').remove();calculate();}});
-  clearButton.addEventListener('click',()=>{form.reset();projectCutsList.innerHTML='';projectCutsList.insertAdjacentHTML('beforeend', createProjectCutRow());document.querySelector('#projectFabricWidth').value=150;document.querySelector('#fabricWidth').value=150;document.querySelector('#sheetFabricWidth').value=150;document.querySelector('#fabricLength').value=200;document.querySelector('#desiredQuantity').value=50;document.querySelector('#mattressWidth').value=150;document.querySelector('#mattressLength').value=190;document.querySelector('#mattressHeight').value=14;document.querySelector('#underturnAllowance').value=10;calculate();});
+  clearButton.addEventListener('click',()=>{form.reset();projectCutsList.innerHTML='';projectCutsList.insertAdjacentHTML('beforeend', createProjectCutRow());document.querySelector('#projectFabricWidth').value=150;document.querySelector('#fabricWidth').value=150;document.querySelector('#sheetFabricWidth').value=150;document.querySelector('#fabricLength').value=200;document.querySelector('#desiredQuantity').value=50;document.querySelector('#mattressWidth').value=150;document.querySelector('#mattressLength').value=190;document.querySelector('#mattressHeight').value=14;document.querySelector('#underturnAllowance').value=10;clearProjectEditingState();calculate();});
   projectCutsList.insertAdjacentHTML('beforeend', createProjectCutRow());
 } else {
-  clearButton.addEventListener('click',()=>{form.reset();calculate();});
+  clearButton.addEventListener('click',()=>{form.reset();clearProjectEditingState();calculate();});
 }
 if (projectCutsList && typeof projectCutsList.insertAdjacentHTML === 'function' && projectModeSection && document.querySelector('#projectFabricWidth')) setMode('project');
 else calculate();
@@ -413,5 +886,14 @@ if (closeAuthButton) closeAuthButton.addEventListener('click',()=>closeAuthModal
 if (loginButton) loginButton.addEventListener('click',()=>{ handleLogin().catch(error=>setAuthFeedback(error.message, true)); });
 if (signupButton) signupButton.addEventListener('click',()=>{ handleSignup().catch(error=>setAuthFeedback(error.message, true)); });
 if (logoutButton) logoutButton.addEventListener('click',()=>{ handleLogout().catch(error=>setAuthFeedback(error.message, true)); });
+if (saveProjectButton) saveProjectButton.addEventListener('click',()=>{ saveProject().catch(error=>{
+  console.error('Erro completo ao salvar Projeto Livre:', error);
+  setSaveFeedback('Não foi possível salvar o projeto. Tente novamente.', 'error');
+}); });
+if (myProjectsList) myProjectsList.addEventListener('click', event => {
+  const openButton = event.target.closest?.('.saved-project-open');
+  if (!openButton) return;
+  savedProjectActions.open(openButton.dataset.projectId);
+});
 
 initAuth().catch(()=>updateAuthUI());
