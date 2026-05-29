@@ -63,16 +63,12 @@ function getColumnFromSchemaError(error) {
   return plainMatch ? plainMatch[1] : '';
 }
 
-async function insertWithAvailableColumns(tableName, payload, selectColumns = '*') {
+async function runWithAvailableColumns(tableName, payload, operation, selectColumns = '*') {
   let nextPayload = { ...payload };
   const removedColumns = new Set();
 
   for (let attempt = 0; attempt < 12; attempt += 1) {
-    const { data, error } = await supabaseClient
-      .from(tableName)
-      .insert(nextPayload)
-      .select(selectColumns)
-      .single();
+    const { data, error } = await operation(nextPayload).select(selectColumns).single();
 
     if (!error) return data;
 
@@ -90,6 +86,44 @@ async function insertWithAvailableColumns(tableName, payload, selectColumns = '*
   throw new Error(`Não foi possível salvar em ${tableName}: muitas tentativas de ajuste de colunas.`);
 }
 
+async function insertWithAvailableColumns(tableName, payload, selectColumns = '*') {
+  return runWithAvailableColumns(
+    tableName,
+    payload,
+    nextPayload => supabaseClient.from(tableName).insert(nextPayload),
+    selectColumns
+  );
+}
+
+async function updateWithAvailableColumns(tableName, payload, matchColumns, selectColumns = '*') {
+  return runWithAvailableColumns(
+    tableName,
+    payload,
+    nextPayload => supabaseClient.from(tableName).update(nextPayload).match(matchColumns),
+    selectColumns
+  );
+}
+
+
+function updateSaveProjectButtonText() {
+  if (!saveProjectButton || isSavingProject) return;
+  saveProjectButton.textContent = projetoAtualId ? 'Salvar alterações' : 'Salvar projeto';
+}
+
+function setCurrentProjectState(projectId = null, calculationId = null) {
+  projetoAtualId = projectId;
+  calculoAtualId = calculationId;
+  updateSaveProjectButtonText();
+}
+
+function resetCurrentProjectState() {
+  setCurrentProjectState(null, null);
+}
+
+function clearProjectEditingState() {
+  resetCurrentProjectState();
+  setSaveFeedback('', '');
+}
 
 function clearAuthForm() {
   if (authName) authName.value = '';
@@ -118,6 +152,7 @@ function updateAuthUI() {
       renderMyProjectsError();
     });
   } else {
+    resetCurrentProjectState();
     authStatusEl.textContent = 'Modo visitante';
     openAuthButton.classList.remove('hidden');
     logoutButton.classList.add('hidden');
@@ -169,6 +204,7 @@ async function handleLogout() {
   if (!supabaseClient) return;
   await supabaseClient.auth.signOut();
   currentUser = null;
+  resetCurrentProjectState();
   updateAuthUI();
 }
 
@@ -188,6 +224,8 @@ let lastSummary = '';
 let lastProjectInput = null;
 let lastProjectResult = null;
 let isSavingProject = false;
+let projetoAtualId = null;
+let calculoAtualId = null;
 
 const comparisonWidths = [115, 120, 140, 150, 160, 180, 250, 300];
 
@@ -386,6 +424,77 @@ function buildProjectSummaryForSave(input, result) {
   return `${lastSummary}\n\nItens detalhados:\n${cutLines.join('\n') || '- Nenhum corte válido informado.'}`;
 }
 
+function buildProjectPayload(input, includeUpdatedAt = false) {
+  return {
+    nome: input.projectName || 'Projeto Livre sem nome',
+    categoria: 'Projeto Livre',
+    observacoes: input.notes || null,
+    ...(includeUpdatedAt ? { updated_at: new Date().toISOString() } : {})
+  };
+}
+
+function buildCalculationPayload(input, result, projectId, resumo, includeUpdatedAt = false) {
+  return {
+    user_id: currentUser.id,
+    projeto_id: projectId,
+    nome: input.projectName || 'Projeto Livre sem nome',
+    tipo_calculo: 'projeto_livre',
+    modo_calculo: 'projeto_livre',
+    largura_tecido_cm: input.fabricWidth,
+    preco_metro_linear: input.pricePerMeter || null,
+    preco_tecido: input.pricePerMeter || null,
+    margem_costura_cm: input.defaultMargin,
+    espacamento_cm: input.defaultSpacing,
+    permitir_girar: input.allowRotate,
+    quantidade_desejada: result.totalQty || null,
+    comprimento_necessario_cm: result.totalLengthCm,
+    custo_estimado_total: result.totalCost || null,
+    resumo,
+    ...(includeUpdatedAt ? { updated_at: new Date().toISOString() } : {})
+  };
+}
+
+async function createSavedProject(input, result, resumo) {
+  const project = await insertWithAvailableColumns('projetos', {
+    user_id: currentUser.id,
+    ...buildProjectPayload(input)
+  }, 'id, nome, categoria, created_at');
+
+  const calculation = await insertWithAvailableColumns('calculos_corte',
+    buildCalculationPayload(input, result, project.id, resumo),
+    'id'
+  );
+
+  setCurrentProjectState(project.id, calculation?.id || null);
+  return 'Projeto salvo com sucesso.';
+}
+
+async function updateSavedProject(input, result, resumo) {
+  await updateWithAvailableColumns('projetos',
+    buildProjectPayload(input, true),
+    { id: projetoAtualId, user_id: currentUser.id },
+    'id'
+  );
+
+  if (calculoAtualId) {
+    const calculation = await updateWithAvailableColumns('calculos_corte',
+      buildCalculationPayload(input, result, projetoAtualId, resumo, true),
+      { id: calculoAtualId, projeto_id: projetoAtualId, user_id: currentUser.id },
+      'id'
+    );
+    calculoAtualId = calculation?.id || calculoAtualId;
+  } else {
+    const calculation = await insertWithAvailableColumns('calculos_corte',
+      buildCalculationPayload(input, result, projetoAtualId, resumo),
+      'id'
+    );
+    calculoAtualId = calculation?.id || null;
+  }
+
+  updateSaveProjectButtonText();
+  return 'Projeto atualizado com sucesso.';
+}
+
 async function saveProject() {
   if (isSavingProject) return;
   if (currentMode !== 'project') {
@@ -417,34 +526,12 @@ async function saveProject() {
   setSaveFeedback('', '');
 
   try {
-    const projectName = input.projectName || 'Projeto Livre sem nome';
-    const project = await insertWithAvailableColumns('projetos', {
-      user_id: currentUser.id,
-      nome: projectName,
-      categoria: 'Projeto Livre',
-      observacoes: input.notes || null
-    }, 'id, nome, categoria, created_at');
-
     const resumo = buildProjectSummaryForSave(input, result);
-    await insertWithAvailableColumns('calculos_corte', {
-      user_id: currentUser.id,
-      projeto_id: project.id,
-      nome: projectName,
-      tipo_calculo: 'projeto_livre',
-      modo_calculo: 'projeto_livre',
-      largura_tecido_cm: input.fabricWidth,
-      preco_metro_linear: input.pricePerMeter || null,
-      preco_tecido: input.pricePerMeter || null,
-      margem_costura_cm: input.defaultMargin,
-      espacamento_cm: input.defaultSpacing,
-      permitir_girar: input.allowRotate,
-      quantidade_desejada: result.totalQty || null,
-      comprimento_necessario_cm: result.totalLengthCm,
-      custo_estimado_total: result.totalCost || null,
-      resumo
-    }, 'id');
+    const successMessage = projetoAtualId
+      ? await updateSavedProject(input, result, resumo)
+      : await createSavedProject(input, result, resumo);
 
-    setSaveFeedback('Projeto salvo com sucesso.', 'success');
+    setSaveFeedback(successMessage, 'success');
     await loadMyProjects();
   } catch (error) {
     console.error('Erro completo ao salvar Projeto Livre:', error);
@@ -453,7 +540,7 @@ async function saveProject() {
     isSavingProject = false;
     if (saveProjectButton) {
       saveProjectButton.disabled = false;
-      saveProjectButton.textContent = 'Salvar projeto';
+      updateSaveProjectButtonText();
     }
   }
 }
@@ -584,9 +671,9 @@ async function openSavedProject(projectId) {
       .maybeSingle();
 
     if (calculationError) throw calculationError;
-    if (!calculation) throw new Error('Nenhum cálculo de corte foi encontrado para este projeto.');
 
-    applySavedProjectToForm(project, calculation);
+    applySavedProjectToForm(project, calculation || {});
+    setCurrentProjectState(project.id, calculation?.id || null);
     setSaveFeedback('Projeto carregado com sucesso.', 'success');
   } catch (error) {
     console.error('Erro completo ao abrir Projeto Livre:', error);
@@ -727,10 +814,10 @@ copyButton.addEventListener('click', async ()=>{try{await navigator.clipboard.wr
 if (projectCutsList && typeof projectCutsList.insertAdjacentHTML === 'function') {
   addProjectCutButton.addEventListener('click',()=>{projectCutsList.insertAdjacentHTML('beforeend', createProjectCutRow());calculate();});
   projectCutsList.addEventListener('click',(event)=>{if(event.target.classList.contains('project-remove-cut')){event.target.closest('.project-cut-row').remove();calculate();}});
-  clearButton.addEventListener('click',()=>{form.reset();projectCutsList.innerHTML='';projectCutsList.insertAdjacentHTML('beforeend', createProjectCutRow());document.querySelector('#projectFabricWidth').value=150;document.querySelector('#fabricWidth').value=150;document.querySelector('#sheetFabricWidth').value=150;document.querySelector('#fabricLength').value=200;document.querySelector('#desiredQuantity').value=50;document.querySelector('#mattressWidth').value=150;document.querySelector('#mattressLength').value=190;document.querySelector('#mattressHeight').value=14;document.querySelector('#underturnAllowance').value=10;calculate();});
+  clearButton.addEventListener('click',()=>{form.reset();projectCutsList.innerHTML='';projectCutsList.insertAdjacentHTML('beforeend', createProjectCutRow());document.querySelector('#projectFabricWidth').value=150;document.querySelector('#fabricWidth').value=150;document.querySelector('#sheetFabricWidth').value=150;document.querySelector('#fabricLength').value=200;document.querySelector('#desiredQuantity').value=50;document.querySelector('#mattressWidth').value=150;document.querySelector('#mattressLength').value=190;document.querySelector('#mattressHeight').value=14;document.querySelector('#underturnAllowance').value=10;clearProjectEditingState();calculate();});
   projectCutsList.insertAdjacentHTML('beforeend', createProjectCutRow());
 } else {
-  clearButton.addEventListener('click',()=>{form.reset();calculate();});
+  clearButton.addEventListener('click',()=>{form.reset();clearProjectEditingState();calculate();});
 }
 if (projectCutsList && typeof projectCutsList.insertAdjacentHTML === 'function' && projectModeSection && document.querySelector('#projectFabricWidth')) setMode('project');
 else calculate();
