@@ -419,21 +419,37 @@ function renderProjectVisualPreview(input, result) {
   const compact = totalPieces > 80 || fittingItems.length > 8;
 
   const strips = fittingItems.map((item, index) => {
-    const renderedPieces = Math.min(item.cut.quantity, compact ? 24 : 60);
-    const omittedPieces = item.cut.quantity - renderedPieces;
-    const stripHeight = Math.max(compact ? 58 : 72, (item.neededLength / totalLength) * previewHeight);
-    let pieces = '';
+    const stripHeight = Math.max(compact ? 96 : 128, (item.neededLength / totalLength) * previewHeight);
+    const quantityText = item.cut.quantity === 1 ? '1 peça' : `${item.cut.quantity} peças`;
+    const widthFitText = item.piecesAcross === 1 ? 'cabe 1 peça' : `cabem ${item.piecesAcross} peças`;
+    const rowText = item.rowsNeeded === 1 ? 'usa 1 fileira' : `usa ${item.rowsNeeded} fileiras`;
+    const detailsOpen = fittingItems.length <= 6 ? ' open' : '';
 
-    for (let pieceIndex = 0; pieceIndex < renderedPieces; pieceIndex += 1) {
-      pieces += `<span class="project-preview-piece" title="${escapeHtml(item.cut.name)} ${pieceIndex + 1}"><strong>${escapeHtml(item.cut.name)}</strong><small>${pieceIndex + 1}/${item.cut.quantity}</small></span>`;
-    }
-
-    return `<div class="project-preview-strip" style="--item-color:${getProjectPreviewColor(index)}; --pieces-across:${Math.max(item.piecesAcross, 1)}; min-height:${round(stripHeight)}px;">
+    return `<div class="project-preview-strip" style="--item-color:${getProjectPreviewColor(index)}; min-height:${round(stripHeight)}px;">
       <div class="project-preview-strip-header">
         <strong>${escapeHtml(item.cut.name)}</strong>
-        <span>${item.cut.quantity} un • ${formatPieceMeasure(item.finalWidth, item.finalLength)} • ${item.piecesAcross} por faixa • ${item.rowsNeeded} fileira(s)</span>
+        <span>Cortar ${quantityText} de ${formatCm(item.finalWidth)} de largura por ${formatCm(item.finalLength)} de comprimento.</span>
       </div>
-      <div class="project-preview-grid">${pieces}${omittedPieces > 0 ? `<span class="project-preview-more">+${omittedPieces}</span>` : ''}</div>
+      <div class="project-cut-shape-wrap">
+        <div class="project-cut-measure width">Largura: ${formatCm(item.finalWidth)}</div>
+        <div class="project-cut-shape">
+          <div class="project-cut-measure length">Comprimento: ${formatCm(item.finalLength)}</div>
+          <div class="project-cut-label">
+            <strong>${escapeHtml(item.cut.name)}</strong>
+            <span>${quantityText}</span>
+            <small>${formatCm(item.finalWidth)} largura × ${formatCm(item.finalLength)} comprimento</small>
+          </div>
+        </div>
+      </div>
+      <details class="project-preview-details"${detailsOpen}>
+        <summary>Ver explicação deste corte</summary>
+        <div class="project-preview-detail-grid">
+          <span><strong>Quantidade</strong>${item.cut.quantity}</span>
+          <span><strong>Corte</strong>${formatCm(item.finalWidth)} largura × ${formatCm(item.finalLength)} comprimento</span>
+          <span><strong>Na largura</strong>${widthFitText} na largura do tecido</span>
+          <span><strong>No comprimento</strong>${rowText} e usa ${formatCm(item.neededLength)}</span>
+        </div>
+      </details>
     </div>`;
   }).join('');
 
@@ -443,7 +459,7 @@ function renderProjectVisualPreview(input, result) {
 
   previewEl.innerHTML = `<section class="layout-preview project-visual-preview">
     <h3>Visualização do projeto</h3>
-    <p>Visualização aproximada para facilitar o entendimento. O cálculo numérico continua sendo a referência.</p>
+    <p>Visualização aproximada. O cálculo numérico é a referência.</p>
     ${notFittingAlert}
     <div class="project-fabric-measure top">Largura do tecido: ${formatCm(input.fabricWidth)}</div>
     <div class="project-fabric-wrap">
