@@ -355,6 +355,212 @@ footer {
   margin-top: 10px !important;
 }
 
+.project-visual-preview {
+  overflow: hidden;
+}
+
+.project-fabric-measure {
+  color: var(--primary-dark);
+  font-size: 12px;
+  font-weight: 800;
+  text-align: center;
+}
+
+.project-fabric-measure.top {
+  margin: 8px 0 6px;
+}
+
+.project-fabric-measure.bottom {
+  margin-top: 8px;
+}
+
+.project-fabric-wrap {
+  max-height: 430px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.project-fabric-canvas {
+  background: repeating-linear-gradient(
+    45deg,
+    #fff,
+    #fff 12px,
+    #fff4ef 12px,
+    #fff4ef 24px
+  );
+  border: 2px dashed var(--primary);
+  border-radius: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 220px;
+  min-width: 260px;
+  overflow: hidden;
+  padding: 10px;
+}
+
+.project-preview-strip {
+  background: var(--item-color);
+  border: 1px solid rgba(156, 94, 69, 0.24);
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px;
+}
+
+.project-preview-strip-header {
+  display: grid;
+  gap: 4px;
+}
+
+.project-preview-strip-header strong {
+  color: var(--primary-dark);
+  font-size: 15px;
+}
+
+.project-preview-strip-header span {
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.project-cut-shape-wrap {
+  display: grid;
+  gap: 7px;
+}
+
+.project-cut-measure {
+  color: var(--primary-dark);
+  font-size: 12px;
+  font-weight: 800;
+  text-align: center;
+}
+
+.project-preview-piece-grid {
+  background: rgba(255, 255, 255, 0.58);
+  border: 1px dashed var(--primary-dark);
+  border-radius: 12px;
+  display: grid;
+  gap: 6px;
+  grid-template-columns: repeat(var(--pieces-across), minmax(58px, 1fr));
+  padding: 8px;
+}
+
+.project-preview-piece {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.82);
+  border: 1px solid rgba(156, 94, 69, 0.24);
+  border-radius: 9px;
+  color: var(--primary-dark);
+  display: grid;
+  gap: 2px;
+  justify-items: center;
+  min-height: 42px;
+  padding: 6px 5px;
+  text-align: center;
+}
+
+.project-preview-piece strong {
+  font-size: 12px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-preview-piece small {
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.project-preview-piece em {
+  color: var(--muted);
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.project-preview-count {
+  color: var(--muted);
+  font-size: 12px !important;
+  font-weight: 800;
+  margin: 0 !important;
+  text-align: center;
+}
+
+.project-preview-details {
+  background: rgba(255, 255, 255, 0.6);
+  border: 1px solid rgba(156, 94, 69, 0.16);
+  border-radius: 10px;
+  padding: 8px 10px;
+}
+
+.project-preview-details summary {
+  color: var(--primary-dark);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.project-preview-detail-grid {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 8px;
+}
+
+.project-preview-detail-grid span {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.project-preview-detail-grid strong {
+  color: var(--text);
+  display: block;
+  font-size: 12px;
+  margin-bottom: 2px;
+}
+
+.project-detail-card {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px;
+}
+
+.project-detail-card strong {
+  color: var(--primary-dark);
+  display: block;
+  margin-bottom: 6px;
+}
+
+.project-detail-card p {
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.35;
+  margin: 4px 0;
+}
+
+.project-detail-card-alert {
+  background: #fff0ed;
+  border-color: #ffc8bb;
+}
+
+.project-preview-alert {
+  background: #fff0ed;
+  border: 1px solid #ffc8bb;
+  border-radius: 12px;
+  color: var(--danger);
+  font-size: 13px;
+  font-weight: 700;
+  margin-bottom: 10px;
+  padding: 8px 10px;
+}
+
 .result-lead {
   background: #fff4ef;
   border: 1px solid var(--border);
@@ -450,6 +656,31 @@ footer {
   .preview-piece {
     font-size: 10px;
     min-height: 24px;
+  }
+
+  .project-fabric-canvas {
+    min-width: 220px;
+    padding: 8px;
+  }
+
+  .project-preview-piece-grid {
+    gap: 5px;
+    grid-template-columns: repeat(var(--pieces-across), minmax(44px, 1fr));
+    padding: 6px;
+  }
+
+  .project-preview-piece {
+    min-height: 38px;
+    padding: 5px 4px;
+  }
+
+  .project-preview-piece strong,
+  .project-preview-piece small {
+    font-size: 10px;
+  }
+
+  .project-preview-detail-grid {
+    grid-template-columns: 1fr;
   }
 }
 

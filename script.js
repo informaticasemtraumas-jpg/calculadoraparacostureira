@@ -397,6 +397,121 @@ function calculateProject(input) {
   return { items, alerts, totalLengthCm, totalQty, totalCost, suggestedLength: roundUpPurchaseLength(totalLengthCm), notFitting };
 }
 
+function getProjectPreviewColor(index) {
+  const colors = ['#f9d8cf', '#d8e8ff', '#def3df', '#f7e2b7', '#eadcff', '#d9f2f0', '#ffdceb', '#e7ecff'];
+  return colors[index % colors.length];
+}
+
+function pluralizePiece(quantity) {
+  return quantity === 1 ? '1 peça' : `${quantity} peças`;
+}
+
+function pluralizeRow(quantity) {
+  return quantity === 1 ? '1 fileira' : `${quantity} fileiras`;
+}
+
+function renderProjectDetailItem(item) {
+  if (!item.fits) {
+    return `<div class="project-detail-card project-detail-card-alert"><strong>Nome: ${escapeHtml(item.cut.name)}</strong><p>Este item não cabe na largura do tecido informado.</p></div>`;
+  }
+
+  const quantityText = pluralizePiece(item.cut.quantity);
+  const widthText = item.piecesAcross === 1
+    ? 'Cabe 1 peça lado a lado na largura do tecido'
+    : `Cabem ${item.piecesAcross} peças lado a lado na largura do tecido`;
+
+  return `<div class="project-detail-card">
+    <strong>Nome: ${escapeHtml(item.cut.name)}</strong>
+    <p><b>Quantidade:</b> ${quantityText}</p>
+    <p><b>Cada peça mede:</b> ${formatCm(item.finalWidth)} de largura x ${formatCm(item.finalLength)} de comprimento</p>
+    <p><b>Na largura:</b> ${widthText}</p>
+    <p><b>No comprimento:</b> serão necessárias ${pluralizeRow(item.rowsNeeded)}</p>
+    <p><b>Comprimento usado:</b> ${formatCm(item.neededLength)}</p>
+  </div>`;
+}
+
+function renderProjectVisualPreview(input, result) {
+  if (!previewEl) return;
+
+  const fittingItems = result.items.filter(item => item.fits);
+  const notFittingItems = result.items.filter(item => !item.fits);
+
+  if (!fittingItems.length) {
+    previewEl.innerHTML = `<section class="layout-preview project-visual-preview"><h3>Visualização do projeto</h3><p class="preview-note">Informe cortes que caibam na largura do tecido para ver uma visualização aproximada.</p>${notFittingItems.length ? `<div class="project-preview-alert">Itens fora da largura: ${escapeHtml(notFittingItems.map(item => item.cut.name).join(', '))}.</div>` : ''}</section>`;
+    return;
+  }
+
+  const totalLength = Math.max(result.totalLengthCm, 1);
+  const previewHeight = Math.max(220, Math.min(520, (totalLength / Math.max(input.fabricWidth, 1)) * 220));
+  const totalPieces = fittingItems.reduce((sum, item) => sum + item.cut.quantity, 0);
+  const compact = totalPieces > 80 || fittingItems.length > 8;
+
+  const strips = fittingItems.map((item, index) => {
+    const maxPreviewPieces = compact ? 24 : 48;
+    const previewPieces = Math.min(item.cut.quantity, maxPreviewPieces);
+    const previewRows = Math.ceil(previewPieces / Math.max(item.piecesAcross, 1));
+    const omittedPieces = item.cut.quantity - previewPieces;
+    const stripHeight = Math.max(96, Math.min(260, 68 + (previewRows * 46)));
+    const quantityText = pluralizePiece(item.cut.quantity);
+    const widthFitText = item.piecesAcross === 1 ? 'Cabe 1 peça na largura do tecido.' : `Cabem ${item.piecesAcross} peças lado a lado na largura do tecido.`;
+    const rowText = `Serão necessárias ${pluralizeRow(item.rowsNeeded)} no comprimento.`;
+    const previewNote = omittedPieces > 0
+      ? `<p class="project-preview-count">Mostrando prévia de ${previewPieces} de ${item.cut.quantity} peças.</p>`
+      : '';
+    let pieces = '';
+
+    for (let pieceIndex = 0; pieceIndex < previewPieces; pieceIndex += 1) {
+      pieces += `<span class="project-preview-piece" title="${escapeHtml(item.cut.name)} - peça ${pieceIndex + 1}">
+        <strong>${escapeHtml(item.cut.name)}</strong>
+        <small>${formatCm(item.finalWidth)} × ${formatCm(item.finalLength)}</small>
+        <em>Peça ${pieceIndex + 1}</em>
+      </span>`;
+    }
+
+    return `<div class="project-preview-strip" style="--item-color:${getProjectPreviewColor(index)}; --pieces-across:${Math.max(item.piecesAcross, 1)}; min-height:${round(stripHeight)}px;">
+      <div class="project-preview-strip-header">
+        <strong>${escapeHtml(item.cut.name)}</strong>
+        <span>Cortar ${quantityText} de ${formatCm(item.finalWidth)} de largura por ${formatCm(item.finalLength)} de comprimento.</span>
+        <span>${widthFitText} ${rowText} Usa ${formatCm(item.neededLength)} no comprimento do tecido.</span>
+      </div>
+      <div class="project-cut-shape-wrap">
+        <div class="project-cut-measure width">Largura de cada peça: ${formatCm(item.finalWidth)}</div>
+        <div class="project-preview-piece-grid">
+          ${pieces}
+        </div>
+        ${previewNote}
+        <div class="project-cut-measure length">Comprimento de cada peça: ${formatCm(item.finalLength)}</div>
+      </div>
+      <details class="project-preview-details">
+        <summary>Ver explicação deste corte</summary>
+        <div class="project-preview-detail-grid">
+          <span><strong>Quantidade</strong>${quantityText}</span>
+          <span><strong>Corte</strong>${formatCm(item.finalWidth)} largura × ${formatCm(item.finalLength)} comprimento</span>
+          <span><strong>Na largura</strong>${widthFitText}</span>
+          <span><strong>No comprimento</strong>${rowText} Comprimento usado: ${formatCm(item.neededLength)}</span>
+        </div>
+      </details>
+    </div>`;
+  }).join('');
+
+  const notFittingAlert = notFittingItems.length
+    ? `<div class="project-preview-alert">Não desenhado dentro do tecido: ${escapeHtml(notFittingItems.map(item => item.cut.name).join(', '))}, pois não cabe na largura informada.</div>`
+    : '';
+
+  previewEl.innerHTML = `<section class="layout-preview project-visual-preview">
+    <h3>Visualização do projeto</h3>
+    <p>Visualização aproximada. O cálculo numérico é a referência.</p>
+    ${notFittingAlert}
+    <div class="project-fabric-measure top">Largura do tecido: ${formatCm(input.fabricWidth)}</div>
+    <div class="project-fabric-wrap">
+      <div class="project-fabric-canvas" style="height:${round(previewHeight)}px;">
+        ${strips}
+      </div>
+    </div>
+    <div class="project-fabric-measure bottom">Comprimento total usado: ${formatCm(result.totalLengthCm)} (${formatMeters(result.totalLengthCm)})</div>
+  </section>`;
+}
+
 function renderProjectResults(input, result) {
   const totalCuts = result.items.length;
   const costItem = input.pricePerMeter > 0 ? renderResultItem(moneyFormatter.format(result.totalCost), 'Custo estimado total') : '';
@@ -407,10 +522,9 @@ function renderProjectResults(input, result) {
     renderResultItem(result.totalQty, 'Quantidade total de cortes'),
     renderResultItem(totalCuts, 'Itens cadastrados')
   ].join('');
-  const itemLines = result.items.map(item => item.fits
-    ? `<div class="result-item"><strong>${item.cut.name}</strong><span>Qtd: ${item.cut.quantity} • Medida final: ${formatPieceMeasure(item.finalWidth,item.finalLength)} • ${item.piecesAcross} por faixa • ${item.rowsNeeded} fileiras • ${formatCm(item.neededLength)}${input.pricePerMeter>0?` • ${moneyFormatter.format(item.itemCost)}`:''}</span></div>`
-    : `<div class="result-item"><strong>${item.cut.name}</strong><span>Não cabe na largura do tecido.</span></div>`).join('');
+  const itemLines = result.items.map(renderProjectDetailItem).join('');
   comparisonEl.innerHTML = `<details class="project-details"><summary>Ver detalhes dos cortes</summary><div class="details-list">${itemLines || '<p>Nenhum corte válido informado.</p>'}</div></details>`;
+  renderProjectVisualPreview(input, result);
   resultLeadEl.textContent = `Projeto ${input.projectName || 'sem nome'}: total estimado de ${formatMeters(result.totalLengthCm)} de tecido.`;
   lastSummary = `📋 Projeto Livre\nProjeto: ${input.projectName || 'Sem nome'}\nCliente: ${input.client || '-'}\nObservações: ${input.notes || '-'}\nLargura do tecido: ${formatCm(input.fabricWidth)}\n\nCortes:\n${result.items.map(item=> item.fits ? `- ${item.cut.name}: ${item.cut.quantity} un, ${formatCm(item.neededLength)}` : `- ${item.cut.name}: não cabe`).join('\n')}\n\nTotal: ${formatCm(result.totalLengthCm)} (${formatMeters(result.totalLengthCm)})\nSugestão: ${formatSuggestedLength(result.suggestedLength)}${input.pricePerMeter>0?`\nCusto estimado: ${moneyFormatter.format(result.totalCost)}`:''}`;
 }
@@ -762,7 +876,7 @@ function calculate() {
     const r = calculateProject(input);
     lastProjectInput = input;
     lastProjectResult = r;
-    renderAlerts(r.alerts); renderProjectResults(input, r); previewEl.innerHTML = ''; summaryEl.textContent=lastSummary; summaryEl.classList.add('hidden'); copyButton.classList.remove('hidden'); return;
+    renderAlerts(r.alerts); renderProjectResults(input, r); summaryEl.textContent=lastSummary; summaryEl.classList.add('hidden'); copyButton.classList.remove('hidden'); return;
   }
   const input = getInputs();
   const errors = validateInputs(input);
