@@ -41,13 +41,13 @@
       <h1>Calculadora de Corte para Costureiras</h1>
       <p>Calcule seus cortes e acompanhe o dinheiro que entra e sai do seu ateliê.</p>
       <nav class="module-nav" aria-label="Módulos do painel">
-        <button class="module-nav-btn active" type="button" data-module-target="calculator">Calculadora de Corte</button>
-        <button class="module-nav-btn" type="button" data-module-target="sheet">Lençol com Elástico</button>
-        <button class="module-nav-btn" type="button" data-module-target="caixa">Caixa do Ateliê</button>
+        <button class="module-nav-btn active" type="button" data-module="corte">Calculadora de Corte</button>
+        <button class="module-nav-btn" type="button" data-module="lencol">Lençol com Elástico</button>
+        <button class="module-nav-btn" type="button" data-module="caixa">Caixa do Ateliê</button>
       </nav>
     </header>
 
-    <div class="layout">
+    <div id="moduloCalculadoraCorte" class="layout modulo-app">
       <section class="card">
         <div class="tabs tabs-3" aria-label="Escolha o modo da calculadora">
           <button class="tab active" type="button" data-mode="project">Projeto Livre</button>
@@ -206,7 +206,7 @@
             </div>
           </div>
 
-          <div class="section hidden" id="sheetModeSection">
+          <div class="section hidden" id="moduloLencolElastico">
             <h2>Lençol com elástico</h2>
             <div class="grid">
               <div>
@@ -282,7 +282,7 @@
       </aside>
     </div>
 
-    <section id="caixaAtelieSection" class="card caixa-card" aria-labelledby="caixaAtelieTitle">
+    <section id="moduloCaixaAtelie" class="card caixa-card modulo-app hidden" aria-labelledby="caixaAtelieTitle">
       <div class="caixa-header">
         <div>
           <p class="eyebrow">Organização simples</p>

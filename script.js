@@ -147,12 +147,15 @@ function mostrarTelaLogin(message = '', isError = false) {
   }
   setAuthFeedback(message, isError);
   resetCurrentProjectState();
+  caixaJaCarregado = false;
+  caixaLancamentosAtuais = [];
   if (myProjectsSection) myProjectsSection.classList.add('hidden');
   if (myProjectsList) myProjectsList.innerHTML = 'Entre para ver seus projetos salvos.';
   mostrarCaixaSemUsuario();
 }
 
-function mostrarSistema() {
+function mostrarSistema(user = currentUser) {
+  currentUser = user || currentUser;
   setAuthLoading(false);
   if (authScreen) authScreen.classList.add('hidden');
   if (appShell) {
@@ -169,10 +172,7 @@ function mostrarSistema() {
     console.error('Erro ao carregar projetos salvos:', error);
     renderMyProjectsError();
   });
-  inicializarCaixaAtelie().catch(error => {
-    console.error('Erro ao carregar Caixa do Ateliê:', error);
-    setCaixaFeedback('Não foi possível carregar o Caixa do Ateliê agora.', 'error');
-  });
+  mostrarModulo('corte');
 }
 
 function updateAuthUI() {
@@ -267,8 +267,12 @@ async function verificarSessao() {
   currentUser = data?.session?.user || null;
   updateAuthUI();
   supabaseClient.auth.onAuthStateChange((_event, session) => {
-    currentUser = session?.user || null;
-    updateAuthUI();
+    if (session?.user) {
+      mostrarSistema(session.user);
+    } else {
+      currentUser = null;
+      mostrarTelaLogin();
+    }
   });
 }
 
@@ -306,7 +310,7 @@ const fabricSection = document.querySelector('#fabricSection');
 const pieceSection = document.querySelector('#pieceSection');
 const costSection = document.querySelector('#costSection');
 const fabricLengthGroup = document.querySelector('#fabricLengthGroup');
-const sheetModeSection = document.querySelector('#sheetModeSection');
+const sheetModeSection = document.querySelector('#moduloLencolElastico');
 const projectModeSection = document.querySelector('#projectModeSection');
 const simpleModeSection = document.querySelector('#simpleModeSection');
 const simpleTabs = document.querySelectorAll('.subtab');
@@ -321,6 +325,11 @@ const comparisonEl = document.querySelector('#widthComparison');
 const copyButton = document.querySelector('#copyButton');
 const clearButton = document.querySelector('#clearButton');
 const moduleNavButtons = document.querySelectorAll('.module-nav-btn');
+const moduloCalculadoraCorte = document.querySelector('#moduloCalculadoraCorte');
+const moduloCaixaAtelie = document.querySelector('#moduloCaixaAtelie');
+const modeTabsContainer = document.querySelector('.tabs');
+const sheetModeTab = document.querySelector('[data-mode="sheet"]');
+let caixaJaCarregado = false;
 const caixaForm = document.querySelector('#caixaForm');
 const caixaLancamentoId = document.querySelector('#caixaLancamentoId');
 const caixaData = document.querySelector('#caixaData');
@@ -1408,19 +1417,37 @@ function setSimpleMode(mode) {
 }
 
 
-function selecionarModuloPainel(target) {
-  moduleNavButtons.forEach(button => button.classList.toggle('active', button.dataset.moduleTarget === target));
-  if (target === 'sheet') {
+function mostrarModulo(modulo = 'corte') {
+  const selectedModule = ['corte', 'lencol', 'caixa'].includes(modulo) ? modulo : 'corte';
+
+  if (moduloCalculadoraCorte) moduloCalculadoraCorte.classList.toggle('hidden', selectedModule === 'caixa');
+  if (moduloCaixaAtelie) moduloCaixaAtelie.classList.toggle('hidden', selectedModule !== 'caixa');
+
+  moduleNavButtons.forEach(button => {
+    button.classList.toggle('active', button.dataset.module === selectedModule);
+  });
+
+  if (modeTabsContainer) modeTabsContainer.classList.toggle('hidden', selectedModule === 'lencol');
+  if (sheetModeTab) sheetModeTab.classList.toggle('hidden', selectedModule !== 'lencol');
+
+  if (selectedModule === 'lencol') {
     setMode('sheet');
-    document.querySelector('#calculatorForm')?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
     return;
   }
-  if (target === 'caixa') {
-    document.querySelector('#caixaAtelieSection')?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+
+  if (selectedModule === 'caixa') {
+    if (!caixaJaCarregado) {
+      caixaJaCarregado = true;
+      inicializarCaixaAtelie().catch(error => {
+        caixaJaCarregado = false;
+        console.error('Erro ao carregar Caixa do Ateliê:', error);
+        setCaixaFeedback('Não foi possível carregar o Caixa do Ateliê agora.', 'error');
+      });
+    }
     return;
   }
-  setMode('project');
-  document.querySelector('#calculatorForm')?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+
+  setMode(currentMode === 'simple' ? 'simple' : 'project');
 }
 
 document.querySelector('#mattressType').addEventListener('change', () => {
@@ -1430,10 +1457,13 @@ document.querySelector('#mattressType').addEventListener('change', () => {
 });
 
 tabs.forEach(tab=>tab.addEventListener('click',()=>{
-  setMode(tab.dataset.mode);
-  moduleNavButtons.forEach(button => button.classList.toggle('active', button.dataset.moduleTarget === (tab.dataset.mode === 'sheet' ? 'sheet' : 'calculator')));
+  if (tab.dataset.mode === 'sheet') mostrarModulo('lencol');
+  else {
+    setMode(tab.dataset.mode);
+    moduleNavButtons.forEach(button => button.classList.toggle('active', button.dataset.module === 'corte'));
+  }
 }));
-moduleNavButtons.forEach(button=>button.addEventListener('click',()=>selecionarModuloPainel(button.dataset.moduleTarget)));
+moduleNavButtons.forEach(button=>button.addEventListener('click',()=>mostrarModulo(button.dataset.module)));
 simpleTabs.forEach(tab=>tab.addEventListener('click',()=>setSimpleMode(tab.dataset.simpleMode)));
 document.querySelectorAll('.preset-btn').forEach(button=>button.addEventListener('click',()=>{document.querySelector('#fabricWidth').value=button.dataset.width;calculate();}));
 document.querySelectorAll('.project-preset-btn').forEach(button=>button.addEventListener('click',()=>{document.querySelector('#projectFabricWidth').value=button.dataset.width;calculate();}));
@@ -1512,6 +1542,7 @@ if (caixaCentroCusto) caixaCentroCusto.addEventListener('change', () => {
 });
 if (caixaCancelarEdicaoButton) caixaCancelarEdicaoButton.addEventListener('click', () => resetarFormularioCaixa());
 if (caixaRefreshButton) caixaRefreshButton.addEventListener('click', () => {
+  caixaJaCarregado = true;
   inicializarCaixaAtelie().catch(error => {
     console.error('Erro ao atualizar Caixa do Ateliê:', error);
     setCaixaFeedback('Não foi possível atualizar o Caixa do Ateliê.', 'error');
