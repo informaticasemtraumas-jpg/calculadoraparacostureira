@@ -3,17 +3,19 @@ const hasWindow = typeof window !== 'undefined';
 const supabaseClient = hasWindow && window.createSupabaseClient ? (window.supabaseClient || window.createSupabaseClient()) : null;
 let currentUser = null;
 
+const appShell = document.querySelector('#appShell');
+const authScreen = document.querySelector('#authScreen');
+const authLoading = document.querySelector('#authLoading');
+const authCard = document.querySelector('#authCard');
+const authForm = document.querySelector('#authForm');
 const authStatusEl = document.querySelector('#authStatus');
-const openAuthButton = document.querySelector('#openAuthButton');
 const logoutButton = document.querySelector('#logoutButton');
-const authModal = document.querySelector('#authModal');
-const closeAuthButton = document.querySelector('#closeAuthButton');
 const authFeedback = document.querySelector('#authFeedback');
-const authName = document.querySelector('#authName');
 const authEmail = document.querySelector('#authEmail');
 const authPassword = document.querySelector('#authPassword');
 const loginButton = document.querySelector('#loginButton');
 const signupButton = document.querySelector('#signupButton');
+const forgotPasswordButton = document.querySelector('#forgotPasswordButton');
 const saveGate = document.querySelector('#saveGate');
 const saveProjectButton = document.querySelector('#saveProjectButton');
 const saveProjectFeedback = document.querySelector('#saveProjectFeedback');
@@ -23,7 +25,8 @@ const myProjectsList = document.querySelector('#myProjectsList');
 function setAuthFeedback(text, isError) {
   if (!authFeedback) return;
   authFeedback.textContent = text || '';
-  authFeedback.style.color = isError ? 'var(--danger)' : 'var(--muted)';
+  authFeedback.classList.toggle('error', Boolean(isError));
+  authFeedback.classList.toggle('success', Boolean(text && !isError));
 }
 
 function setSaveFeedback(text, type = '') {
@@ -126,95 +129,140 @@ function clearProjectEditingState() {
 }
 
 function clearAuthForm() {
-  if (authName) authName.value = '';
   if (authEmail) authEmail.value = '';
   if (authPassword) authPassword.value = '';
 }
 
-function closeAuthModal() {
-  if (!authModal) return;
-  authModal.classList.add('hidden');
-  authModal.classList.remove('active', 'visible');
-  clearAuthForm();
+function setAuthLoading(isLoading) {
+  if (authLoading) authLoading.classList.toggle('hidden', !isLoading);
+  if (authCard) authCard.classList.toggle('hidden', isLoading);
+}
+
+function mostrarTelaLogin(message = '', isError = false) {
+  setAuthLoading(false);
+  if (authScreen) authScreen.classList.remove('hidden');
+  if (appShell) {
+    appShell.classList.add('hidden');
+    appShell.setAttribute?.('aria-hidden', 'true');
+  }
+  setAuthFeedback(message, isError);
+  resetCurrentProjectState();
+  if (myProjectsSection) myProjectsSection.classList.add('hidden');
+  if (myProjectsList) myProjectsList.innerHTML = 'Entre para ver seus projetos salvos.';
+  mostrarCaixaSemUsuario();
+}
+
+function mostrarSistema() {
+  setAuthLoading(false);
+  if (authScreen) authScreen.classList.add('hidden');
+  if (appShell) {
+    appShell.classList.remove('hidden');
+    appShell.setAttribute?.('aria-hidden', 'false');
+  }
+
+  const name = currentUser?.user_metadata?.nome || currentUser?.email || 'usuária';
+  if (authStatusEl) authStatusEl.textContent = `Logada como: ${name} (${currentUser.email})`;
+  if (saveGate) saveGate.textContent = 'Você pode salvar seus Projetos Livres nesta conta.';
+  if (myProjectsSection) myProjectsSection.classList.remove('hidden');
+
+  loadMyProjects().catch(error => {
+    console.error('Erro ao carregar projetos salvos:', error);
+    renderMyProjectsError();
+  });
+  inicializarCaixaAtelie().catch(error => {
+    console.error('Erro ao carregar Caixa do Ateliê:', error);
+    setCaixaFeedback('Não foi possível carregar o Caixa do Ateliê agora.', 'error');
+  });
 }
 
 function updateAuthUI() {
-  if (!authStatusEl || !openAuthButton || !logoutButton) return;
-  if (currentUser) {
-    const name = currentUser.user_metadata?.nome || currentUser.email;
-    authStatusEl.textContent = `Logada como: ${name} (${currentUser.email})`;
-    openAuthButton.classList.add('hidden');
-    logoutButton.classList.remove('hidden');
-    if (saveGate) saveGate.textContent = 'Você pode salvar seus Projetos Livres nesta conta.';
-    if (myProjectsSection) myProjectsSection.classList.remove('hidden');
-    loadMyProjects().catch(error => {
-      console.error('Erro ao carregar projetos salvos:', error);
-      renderMyProjectsError();
-    });
-    inicializarCaixaAtelie().catch(error => {
-      console.error('Erro ao carregar Caixa do Ateliê:', error);
-      setCaixaFeedback('Não foi possível carregar o Caixa do Ateliê agora.', 'error');
-    });
-  } else {
-    resetCurrentProjectState();
-    authStatusEl.textContent = 'Modo visitante';
-    openAuthButton.classList.remove('hidden');
-    logoutButton.classList.add('hidden');
-    if (saveGate) saveGate.textContent = 'Crie uma conta gratuita para salvar seus projetos.';
-    if (myProjectsSection) myProjectsSection.classList.add('hidden');
-    if (myProjectsList) myProjectsList.innerHTML = 'Entre para ver seus projetos salvos.';
-    mostrarCaixaSemUsuario();
+  if (currentUser) mostrarSistema();
+  else mostrarTelaLogin();
+}
+
+async function cadastrarUsuario() {
+  if (!supabaseClient) {
+    setAuthFeedback('Configure o Supabase em supabase.js para ativar autenticação.', true);
+    return;
   }
+  const email = authEmail?.value.trim();
+  const password = authPassword?.value;
+  if (!email || !password) {
+    setAuthFeedback('Preencha e-mail e senha para cadastrar.', true);
+    return;
+  }
+
+  if (signupButton) signupButton.disabled = true;
+  const { error } = await supabaseClient.auth.signUp({ email, password });
+  if (signupButton) signupButton.disabled = false;
+  if (error) {
+    setAuthFeedback('Não foi possível cadastrar. Confira o e-mail e use uma senha com pelo menos 6 caracteres.', true);
+    return;
+  }
+
+  clearAuthForm();
+  setAuthFeedback('Cadastro criado! Verifique seu e-mail, se necessário, e faça login.', false);
 }
 
-async function createProfileForUser(user, nome) {
-  const payload = {
-    id: user.id,
-    nome: nome || user.user_metadata?.nome || user.email,
-    email: user.email,
-    plano: 'free'
-  };
-  const { error } = await supabaseClient.from('profiles').upsert(payload, { onConflict: 'id' });
-  if (error) throw error;
-}
+async function loginUsuario() {
+  if (!supabaseClient) {
+    setAuthFeedback('Configure o Supabase em supabase.js para ativar autenticação.', true);
+    return;
+  }
+  const email = authEmail?.value.trim();
+  const password = authPassword?.value;
+  if (!email || !password) {
+    setAuthFeedback('Preencha e-mail e senha para entrar.', true);
+    return;
+  }
 
-async function handleSignup() {
-  if (!supabaseClient) return setAuthFeedback('Configure o Supabase em supabase.js para ativar autenticação.', true);
-  const email = authEmail.value.trim();
-  const password = authPassword.value;
-  const nome = authName.value.trim();
-  if (!email || !password || !nome) return setAuthFeedback('Preencha nome, e-mail e senha para cadastrar.', true);
-  const { data, error } = await supabaseClient.auth.signUp({ email, password, options: { data: { nome } } });
-  if (error) return setAuthFeedback(error.message, true);
-  if (data.user) await createProfileForUser(data.user, nome);
-  currentUser = data.user || currentUser;
-  updateAuthUI();
-  closeAuthModal();
-  setAuthFeedback('Conta criada com sucesso. Se necessário, confirme o e-mail.', false);
-}
-
-async function handleLogin() {
-  if (!supabaseClient) return setAuthFeedback('Configure o Supabase em supabase.js para ativar autenticação.', true);
-  const email = authEmail.value.trim();
-  const password = authPassword.value;
+  if (loginButton) loginButton.disabled = true;
   const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
-  if (error) return setAuthFeedback(error.message, true);
+  if (loginButton) loginButton.disabled = false;
+  if (error) {
+    setAuthFeedback('Não foi possível entrar. Confira seu e-mail e senha.', true);
+    return;
+  }
+
   currentUser = data.user || null;
-  updateAuthUI();
-  closeAuthModal();
-  setAuthFeedback('Login realizado com sucesso.', false);
+  clearAuthForm();
+  mostrarSistema();
 }
 
-async function handleLogout() {
-  if (!supabaseClient) return;
-  await supabaseClient.auth.signOut();
+async function sairUsuario() {
+  if (supabaseClient) await supabaseClient.auth.signOut();
   currentUser = null;
-  resetCurrentProjectState();
-  updateAuthUI();
+  clearAuthForm();
+  mostrarTelaLogin();
 }
 
-async function initAuth() {
-  if (!supabaseClient) { updateAuthUI(); return; }
+async function recuperarSenhaUsuario() {
+  if (!supabaseClient) {
+    setAuthFeedback('Configure o Supabase em supabase.js para recuperar senha.', true);
+    return;
+  }
+  const email = authEmail?.value.trim();
+  if (!email) {
+    setAuthFeedback('Informe seu e-mail para receber o link de recuperação.', true);
+    return;
+  }
+
+  const redirectTo = hasWindow ? window.location.href.split('#')[0] : undefined;
+  const { error } = await supabaseClient.auth.resetPasswordForEmail(email, { redirectTo });
+  if (error) {
+    setAuthFeedback('Não foi possível enviar o link agora. Confira o e-mail e tente novamente.', true);
+    return;
+  }
+  setAuthFeedback('Se este e-mail estiver cadastrado, você receberá um link para redefinir a senha.', false);
+}
+
+async function verificarSessao() {
+  if (!supabaseClient) {
+    currentUser = null;
+    mostrarTelaLogin('Configure o Supabase em supabase.js para acessar o painel.', true);
+    return;
+  }
+  setAuthLoading(true);
   const { data } = await supabaseClient.auth.getSession();
   currentUser = data?.session?.user || null;
   updateAuthUI();
@@ -223,6 +271,23 @@ async function initAuth() {
     updateAuthUI();
   });
 }
+
+async function handleSignup() {
+  return cadastrarUsuario();
+}
+
+async function handleLogin() {
+  return loginUsuario();
+}
+
+async function handleLogout() {
+  return sairUsuario();
+}
+
+async function initAuth() {
+  return verificarSessao();
+}
+
 let currentMode = 'project';
 let simpleMode = 'have';
 let lastSummary = '';
@@ -255,6 +320,7 @@ const previewEl = document.querySelector('#layoutPreview');
 const comparisonEl = document.querySelector('#widthComparison');
 const copyButton = document.querySelector('#copyButton');
 const clearButton = document.querySelector('#clearButton');
+const moduleNavButtons = document.querySelectorAll('.module-nav-btn');
 const caixaForm = document.querySelector('#caixaForm');
 const caixaLancamentoId = document.querySelector('#caixaLancamentoId');
 const caixaData = document.querySelector('#caixaData');
@@ -1341,13 +1407,33 @@ function setSimpleMode(mode) {
   if (currentMode === 'simple') setMode('simple');
 }
 
+
+function selecionarModuloPainel(target) {
+  moduleNavButtons.forEach(button => button.classList.toggle('active', button.dataset.moduleTarget === target));
+  if (target === 'sheet') {
+    setMode('sheet');
+    document.querySelector('#calculatorForm')?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+    return;
+  }
+  if (target === 'caixa') {
+    document.querySelector('#caixaAtelieSection')?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+    return;
+  }
+  setMode('project');
+  document.querySelector('#calculatorForm')?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+}
+
 document.querySelector('#mattressType').addEventListener('change', () => {
   const preset = getMattressPreset(document.querySelector('#mattressType').value);
   if (preset) { document.querySelector('#mattressWidth').value = preset.width; document.querySelector('#mattressLength').value = preset.length; }
   calculate();
 });
 
-tabs.forEach(tab=>tab.addEventListener('click',()=>setMode(tab.dataset.mode)));
+tabs.forEach(tab=>tab.addEventListener('click',()=>{
+  setMode(tab.dataset.mode);
+  moduleNavButtons.forEach(button => button.classList.toggle('active', button.dataset.moduleTarget === (tab.dataset.mode === 'sheet' ? 'sheet' : 'calculator')));
+}));
+moduleNavButtons.forEach(button=>button.addEventListener('click',()=>selecionarModuloPainel(button.dataset.moduleTarget)));
 simpleTabs.forEach(tab=>tab.addEventListener('click',()=>setSimpleMode(tab.dataset.simpleMode)));
 document.querySelectorAll('.preset-btn').forEach(button=>button.addEventListener('click',()=>{document.querySelector('#fabricWidth').value=button.dataset.width;calculate();}));
 document.querySelectorAll('.project-preset-btn').forEach(button=>button.addEventListener('click',()=>{document.querySelector('#projectFabricWidth').value=button.dataset.width;calculate();}));
@@ -1367,10 +1453,32 @@ if (projectCutsList && typeof projectCutsList.insertAdjacentHTML === 'function')
 if (projectCutsList && typeof projectCutsList.insertAdjacentHTML === 'function' && projectModeSection && document.querySelector('#projectFabricWidth')) setMode('project');
 else calculate();
 
-if (openAuthButton) openAuthButton.addEventListener('click',()=>{ authModal.classList.remove('hidden'); setAuthFeedback('', false); });
-if (closeAuthButton) closeAuthButton.addEventListener('click',()=>closeAuthModal());
-if (loginButton) loginButton.addEventListener('click',()=>{ handleLogin().catch(error=>setAuthFeedback(error.message, true)); });
-if (signupButton) signupButton.addEventListener('click',()=>{ handleSignup().catch(error=>setAuthFeedback(error.message, true)); });
+if (authForm) authForm.addEventListener('submit', event => {
+  event.preventDefault();
+  handleLogin().catch(error => {
+    console.error('Erro completo ao fazer login:', error);
+    setAuthFeedback('Não foi possível entrar. Confira seu e-mail e senha.', true);
+  });
+});
+if (loginButton) loginButton.addEventListener('click', event => {
+  event.preventDefault();
+  handleLogin().catch(error => {
+    console.error('Erro completo ao fazer login:', error);
+    setAuthFeedback('Não foi possível entrar. Confira seu e-mail e senha.', true);
+  });
+});
+if (signupButton) signupButton.addEventListener('click', () => {
+  handleSignup().catch(error => {
+    console.error('Erro completo ao cadastrar:', error);
+    setAuthFeedback('Não foi possível cadastrar. Tente novamente.', true);
+  });
+});
+if (forgotPasswordButton) forgotPasswordButton.addEventListener('click', () => {
+  recuperarSenhaUsuario().catch(error => {
+    console.error('Erro completo ao recuperar senha:', error);
+    setAuthFeedback('Não foi possível enviar o link agora. Tente novamente.', true);
+  });
+});
 if (logoutButton) logoutButton.addEventListener('click',()=>{ handleLogout().catch(error=>setAuthFeedback(error.message, true)); });
 if (saveProjectButton) saveProjectButton.addEventListener('click',()=>{ saveProject().catch(error=>{
   console.error('Erro completo ao salvar Projeto Livre:', error);

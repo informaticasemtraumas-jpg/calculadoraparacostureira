@@ -1004,3 +1004,135 @@ button:disabled {
     grid-column: span 1;
   }
 }
+
+.auth-screen {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 28px 16px;
+  background:
+    radial-gradient(circle at top left, rgba(201, 107, 90, 0.18), transparent 32%),
+    linear-gradient(180deg, var(--bg), #ffffff);
+}
+
+.auth-loading {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  box-shadow: var(--shadow);
+  color: var(--primary-dark);
+  font-size: 18px;
+  font-weight: 800;
+  padding: 18px 24px;
+}
+
+.auth-card {
+  width: min(460px, 100%);
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid var(--border);
+  border-radius: 28px;
+  box-shadow: 0 24px 70px rgba(80, 45, 30, 0.18);
+  padding: 30px;
+}
+
+.auth-card h1 {
+  color: var(--primary-dark);
+  font-size: clamp(34px, 8vw, 46px);
+  line-height: 1;
+  margin: 0 0 8px;
+}
+
+.auth-subtitle {
+  color: var(--text);
+  font-size: 19px;
+  font-weight: 800;
+  margin: 0 0 8px;
+}
+
+.auth-support {
+  color: var(--muted);
+  line-height: 1.5;
+  margin: 0 0 20px;
+}
+
+.auth-form {
+  display: grid;
+  gap: 12px;
+}
+
+.auth-main-button {
+  width: 100%;
+  min-height: 52px;
+}
+
+.auth-feedback {
+  color: var(--muted);
+  font-weight: 700;
+  line-height: 1.4;
+  min-height: 22px;
+  margin-bottom: 8px;
+}
+
+.auth-feedback.error {
+  color: var(--danger);
+}
+
+.auth-feedback.success {
+  color: var(--success);
+}
+
+.link-btn {
+  border: none;
+  background: transparent;
+  color: var(--primary-dark);
+  cursor: pointer;
+  font-size: 15px;
+  font-weight: 800;
+  padding: 8px;
+  text-decoration: underline;
+}
+
+.module-nav {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.module-nav-btn {
+  border: 1px solid var(--border);
+  background: var(--soft);
+  border-radius: 999px;
+  color: var(--primary-dark);
+  cursor: pointer;
+  font-size: 15px;
+  font-weight: 800;
+  padding: 12px 16px;
+}
+
+.module-nav-btn.active,
+.module-nav-btn:hover {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
+}
+
+@media (max-width: 560px) {
+  .auth-card {
+    border-radius: 22px;
+    padding: 22px;
+  }
+
+  .module-nav {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+}
+
+.auth-screen.hidden,
+.auth-card.hidden,
+.auth-loading.hidden {
+  display: none;
+}
