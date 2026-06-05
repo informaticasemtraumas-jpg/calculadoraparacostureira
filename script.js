@@ -3,17 +3,19 @@ const hasWindow = typeof window !== 'undefined';
 const supabaseClient = hasWindow && window.createSupabaseClient ? (window.supabaseClient || window.createSupabaseClient()) : null;
 let currentUser = null;
 
+const appShell = document.querySelector('#appShell');
+const authScreen = document.querySelector('#authScreen');
+const authLoading = document.querySelector('#authLoading');
+const authCard = document.querySelector('#authCard');
+const authForm = document.querySelector('#authForm');
 const authStatusEl = document.querySelector('#authStatus');
-const openAuthButton = document.querySelector('#openAuthButton');
 const logoutButton = document.querySelector('#logoutButton');
-const authModal = document.querySelector('#authModal');
-const closeAuthButton = document.querySelector('#closeAuthButton');
 const authFeedback = document.querySelector('#authFeedback');
-const authName = document.querySelector('#authName');
 const authEmail = document.querySelector('#authEmail');
 const authPassword = document.querySelector('#authPassword');
 const loginButton = document.querySelector('#loginButton');
 const signupButton = document.querySelector('#signupButton');
+const forgotPasswordButton = document.querySelector('#forgotPasswordButton');
 const saveGate = document.querySelector('#saveGate');
 const saveProjectButton = document.querySelector('#saveProjectButton');
 const saveProjectFeedback = document.querySelector('#saveProjectFeedback');
@@ -23,7 +25,8 @@ const myProjectsList = document.querySelector('#myProjectsList');
 function setAuthFeedback(text, isError) {
   if (!authFeedback) return;
   authFeedback.textContent = text || '';
-  authFeedback.style.color = isError ? 'var(--danger)' : 'var(--muted)';
+  authFeedback.classList.toggle('error', Boolean(isError));
+  authFeedback.classList.toggle('success', Boolean(text && !isError));
 }
 
 function setSaveFeedback(text, type = '') {
@@ -126,90 +129,140 @@ function clearProjectEditingState() {
 }
 
 function clearAuthForm() {
-  if (authName) authName.value = '';
   if (authEmail) authEmail.value = '';
   if (authPassword) authPassword.value = '';
 }
 
-function closeAuthModal() {
-  if (!authModal) return;
-  authModal.classList.add('hidden');
-  authModal.classList.remove('active', 'visible');
-  clearAuthForm();
+function setAuthLoading(isLoading) {
+  if (authLoading) authLoading.classList.toggle('hidden', !isLoading);
+  if (authCard) authCard.classList.toggle('hidden', isLoading);
+}
+
+function mostrarTelaLogin(message = '', isError = false) {
+  setAuthLoading(false);
+  if (authScreen) authScreen.classList.remove('hidden');
+  if (appShell) {
+    appShell.classList.add('hidden');
+    appShell.setAttribute?.('aria-hidden', 'true');
+  }
+  setAuthFeedback(message, isError);
+  resetCurrentProjectState();
+  if (myProjectsSection) myProjectsSection.classList.add('hidden');
+  if (myProjectsList) myProjectsList.innerHTML = 'Entre para ver seus projetos salvos.';
+  mostrarCaixaSemUsuario();
+}
+
+function mostrarSistema() {
+  setAuthLoading(false);
+  if (authScreen) authScreen.classList.add('hidden');
+  if (appShell) {
+    appShell.classList.remove('hidden');
+    appShell.setAttribute?.('aria-hidden', 'false');
+  }
+
+  const name = currentUser?.user_metadata?.nome || currentUser?.email || 'usuária';
+  if (authStatusEl) authStatusEl.textContent = `Logada como: ${name} (${currentUser.email})`;
+  if (saveGate) saveGate.textContent = 'Você pode salvar seus Projetos Livres nesta conta.';
+  if (myProjectsSection) myProjectsSection.classList.remove('hidden');
+
+  loadMyProjects().catch(error => {
+    console.error('Erro ao carregar projetos salvos:', error);
+    renderMyProjectsError();
+  });
+  inicializarCaixaAtelie().catch(error => {
+    console.error('Erro ao carregar Caixa do Ateliê:', error);
+    setCaixaFeedback('Não foi possível carregar o Caixa do Ateliê agora.', 'error');
+  });
 }
 
 function updateAuthUI() {
-  if (!authStatusEl || !openAuthButton || !logoutButton) return;
-  if (currentUser) {
-    const name = currentUser.user_metadata?.nome || currentUser.email;
-    authStatusEl.textContent = `Logada como: ${name} (${currentUser.email})`;
-    openAuthButton.classList.add('hidden');
-    logoutButton.classList.remove('hidden');
-    if (saveGate) saveGate.textContent = 'Você pode salvar seus Projetos Livres nesta conta.';
-    if (myProjectsSection) myProjectsSection.classList.remove('hidden');
-    loadMyProjects().catch(error => {
-      console.error('Erro ao carregar projetos salvos:', error);
-      renderMyProjectsError();
-    });
-  } else {
-    resetCurrentProjectState();
-    authStatusEl.textContent = 'Modo visitante';
-    openAuthButton.classList.remove('hidden');
-    logoutButton.classList.add('hidden');
-    if (saveGate) saveGate.textContent = 'Crie uma conta gratuita para salvar seus projetos.';
-    if (myProjectsSection) myProjectsSection.classList.add('hidden');
-    if (myProjectsList) myProjectsList.innerHTML = 'Entre para ver seus projetos salvos.';
+  if (currentUser) mostrarSistema();
+  else mostrarTelaLogin();
+}
+
+async function cadastrarUsuario() {
+  if (!supabaseClient) {
+    setAuthFeedback('Configure o Supabase em supabase.js para ativar autenticação.', true);
+    return;
   }
+  const email = authEmail?.value.trim();
+  const password = authPassword?.value;
+  if (!email || !password) {
+    setAuthFeedback('Preencha e-mail e senha para cadastrar.', true);
+    return;
+  }
+
+  if (signupButton) signupButton.disabled = true;
+  const { error } = await supabaseClient.auth.signUp({ email, password });
+  if (signupButton) signupButton.disabled = false;
+  if (error) {
+    setAuthFeedback('Não foi possível cadastrar. Confira o e-mail e use uma senha com pelo menos 6 caracteres.', true);
+    return;
+  }
+
+  clearAuthForm();
+  setAuthFeedback('Cadastro criado! Verifique seu e-mail, se necessário, e faça login.', false);
 }
 
-async function createProfileForUser(user, nome) {
-  const payload = {
-    id: user.id,
-    nome: nome || user.user_metadata?.nome || user.email,
-    email: user.email,
-    plano: 'free'
-  };
-  const { error } = await supabaseClient.from('profiles').upsert(payload, { onConflict: 'id' });
-  if (error) throw error;
-}
+async function loginUsuario() {
+  if (!supabaseClient) {
+    setAuthFeedback('Configure o Supabase em supabase.js para ativar autenticação.', true);
+    return;
+  }
+  const email = authEmail?.value.trim();
+  const password = authPassword?.value;
+  if (!email || !password) {
+    setAuthFeedback('Preencha e-mail e senha para entrar.', true);
+    return;
+  }
 
-async function handleSignup() {
-  if (!supabaseClient) return setAuthFeedback('Configure o Supabase em supabase.js para ativar autenticação.', true);
-  const email = authEmail.value.trim();
-  const password = authPassword.value;
-  const nome = authName.value.trim();
-  if (!email || !password || !nome) return setAuthFeedback('Preencha nome, e-mail e senha para cadastrar.', true);
-  const { data, error } = await supabaseClient.auth.signUp({ email, password, options: { data: { nome } } });
-  if (error) return setAuthFeedback(error.message, true);
-  if (data.user) await createProfileForUser(data.user, nome);
-  currentUser = data.user || currentUser;
-  updateAuthUI();
-  closeAuthModal();
-  setAuthFeedback('Conta criada com sucesso. Se necessário, confirme o e-mail.', false);
-}
-
-async function handleLogin() {
-  if (!supabaseClient) return setAuthFeedback('Configure o Supabase em supabase.js para ativar autenticação.', true);
-  const email = authEmail.value.trim();
-  const password = authPassword.value;
+  if (loginButton) loginButton.disabled = true;
   const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
-  if (error) return setAuthFeedback(error.message, true);
+  if (loginButton) loginButton.disabled = false;
+  if (error) {
+    setAuthFeedback('Não foi possível entrar. Confira seu e-mail e senha.', true);
+    return;
+  }
+
   currentUser = data.user || null;
-  updateAuthUI();
-  closeAuthModal();
-  setAuthFeedback('Login realizado com sucesso.', false);
+  clearAuthForm();
+  mostrarSistema();
 }
 
-async function handleLogout() {
-  if (!supabaseClient) return;
-  await supabaseClient.auth.signOut();
+async function sairUsuario() {
+  if (supabaseClient) await supabaseClient.auth.signOut();
   currentUser = null;
-  resetCurrentProjectState();
-  updateAuthUI();
+  clearAuthForm();
+  mostrarTelaLogin();
 }
 
-async function initAuth() {
-  if (!supabaseClient) { updateAuthUI(); return; }
+async function recuperarSenhaUsuario() {
+  if (!supabaseClient) {
+    setAuthFeedback('Configure o Supabase em supabase.js para recuperar senha.', true);
+    return;
+  }
+  const email = authEmail?.value.trim();
+  if (!email) {
+    setAuthFeedback('Informe seu e-mail para receber o link de recuperação.', true);
+    return;
+  }
+
+  const redirectTo = hasWindow ? window.location.href.split('#')[0] : undefined;
+  const { error } = await supabaseClient.auth.resetPasswordForEmail(email, { redirectTo });
+  if (error) {
+    setAuthFeedback('Não foi possível enviar o link agora. Confira o e-mail e tente novamente.', true);
+    return;
+  }
+  setAuthFeedback('Se este e-mail estiver cadastrado, você receberá um link para redefinir a senha.', false);
+}
+
+async function verificarSessao() {
+  if (!supabaseClient) {
+    currentUser = null;
+    mostrarTelaLogin('Configure o Supabase em supabase.js para acessar o painel.', true);
+    return;
+  }
+  setAuthLoading(true);
   const { data } = await supabaseClient.auth.getSession();
   currentUser = data?.session?.user || null;
   updateAuthUI();
@@ -218,6 +271,23 @@ async function initAuth() {
     updateAuthUI();
   });
 }
+
+async function handleSignup() {
+  return cadastrarUsuario();
+}
+
+async function handleLogin() {
+  return loginUsuario();
+}
+
+async function handleLogout() {
+  return sairUsuario();
+}
+
+async function initAuth() {
+  return verificarSessao();
+}
+
 let currentMode = 'project';
 let simpleMode = 'have';
 let lastSummary = '';
@@ -250,6 +320,33 @@ const previewEl = document.querySelector('#layoutPreview');
 const comparisonEl = document.querySelector('#widthComparison');
 const copyButton = document.querySelector('#copyButton');
 const clearButton = document.querySelector('#clearButton');
+const moduleNavButtons = document.querySelectorAll('.module-nav-btn');
+const caixaForm = document.querySelector('#caixaForm');
+const caixaLancamentoId = document.querySelector('#caixaLancamentoId');
+const caixaData = document.querySelector('#caixaData');
+const caixaTipo = document.querySelector('#caixaTipo');
+const caixaCentroCusto = document.querySelector('#caixaCentroCusto');
+const caixaCategoria = document.querySelector('#caixaCategoria');
+const caixaDescricao = document.querySelector('#caixaDescricao');
+const caixaValor = document.querySelector('#caixaValor');
+const caixaFormaPagamento = document.querySelector('#caixaFormaPagamento');
+const caixaNome = document.querySelector('#caixaNome');
+const caixaObservacao = document.querySelector('#caixaObservacao');
+const caixaSalvarButton = document.querySelector('#caixaSalvarButton');
+const caixaCancelarEdicaoButton = document.querySelector('#caixaCancelarEdicaoButton');
+const caixaAuthMessage = document.querySelector('#caixaAuthMessage');
+const caixaFeedback = document.querySelector('#caixaFeedback');
+const caixaAlertas = document.querySelector('#caixaAlertas');
+const caixaResumo = document.querySelector('#caixaResumo');
+const caixaLancamentosLista = document.querySelector('#caixaLancamentosLista');
+const caixaRefreshButton = document.querySelector('#caixaRefreshButton');
+const caixaFiltroMes = document.querySelector('#caixaFiltroMes');
+const caixaFiltroTipo = document.querySelector('#caixaFiltroTipo');
+const caixaFiltroCentro = document.querySelector('#caixaFiltroCentro');
+const caixaFiltroCategoria = document.querySelector('#caixaFiltroCategoria');
+const caixaFiltroBusca = document.querySelector('#caixaFiltroBusca');
+let caixaLancamentosAtuais = [];
+let caixaCategoriasAtuais = [];
 
 const moneyFormatter = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 const decimalFormatter = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
@@ -833,6 +930,406 @@ async function loadMyProjects() {
   `).join('');
 }
 
+
+function setCaixaFeedback(text, type = '') {
+  if (!caixaFeedback) return;
+  caixaFeedback.textContent = text || '';
+  caixaFeedback.classList.remove('success', 'error');
+  if (type) caixaFeedback.classList.add(type);
+}
+
+function formatDateInputCaixa(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function formatMonthInputCaixa(date = new Date()) {
+  return formatDateInputCaixa(date).slice(0, 7);
+}
+
+function formatDateBrCaixa(value) {
+  if (!value) return '-';
+  const [year, month, day] = String(value).slice(0, 10).split('-');
+  if (!year || !month || !day) return '-';
+  return `${day}/${month}/${year}`;
+}
+
+function parseMoneyCaixa(value) {
+  const normalized = String(value || '')
+    .replace(/[^0-9,.-]/g, '')
+    .replace(/\.(?=\d{3}(\D|$))/g, '')
+    .replace(',', '.');
+  const number = Number(normalized);
+  return Number.isFinite(number) ? Math.abs(number) : 0;
+}
+
+function normalizeCaixaText(value) {
+  return String(value || '').trim();
+}
+
+function traduzirCaixa(value) {
+  const labels = {
+    ENTRADA: 'Entrada',
+    SAIDA: 'Saída',
+    ATELIE: 'Ateliê',
+    PESSOAL: 'Pessoal'
+  };
+  return labels[value] || value || '-';
+}
+
+function requireCaixaUser() {
+  if (!supabaseClient) {
+    setCaixaFeedback('Configure o Supabase em supabase.js para usar o Caixa do Ateliê.', 'error');
+    return null;
+  }
+  if (!currentUser) {
+    mostrarCaixaSemUsuario();
+    return null;
+  }
+  if (caixaAuthMessage) caixaAuthMessage.textContent = '';
+  return currentUser;
+}
+
+function mostrarCaixaSemUsuario() {
+  const message = 'Entre na sua conta para usar o Caixa do Ateliê.';
+  if (caixaAuthMessage) caixaAuthMessage.textContent = message;
+  if (caixaData && !caixaData.value) caixaData.value = formatDateInputCaixa();
+  if (caixaFiltroMes && !caixaFiltroMes.value) caixaFiltroMes.value = formatMonthInputCaixa();
+  if (caixaFeedback) caixaFeedback.textContent = '';
+  if (caixaAlertas) caixaAlertas.innerHTML = '';
+  if (caixaResumo) caixaResumo.innerHTML = '';
+  if (caixaLancamentosLista) caixaLancamentosLista.innerHTML = `<tr><td colspan="9">${message}</td></tr>`;
+}
+
+function resetarFormularioCaixa() {
+  if (!caixaForm) return;
+  caixaForm.reset();
+  if (caixaLancamentoId) caixaLancamentoId.value = '';
+  if (caixaData) caixaData.value = formatDateInputCaixa();
+  if (caixaSalvarButton) caixaSalvarButton.textContent = 'Salvar lançamento';
+  if (caixaCancelarEdicaoButton) caixaCancelarEdicaoButton.classList.add('hidden');
+  carregarCategoriasCaixa().catch(error => {
+    console.error('Erro ao recarregar categorias do Caixa:', error);
+    setCaixaFeedback('Não foi possível carregar as categorias.', 'error');
+  });
+}
+
+function preencherSelectCategoriasCaixa(select, categorias, placeholder) {
+  if (!select) return;
+  const currentValue = select.value;
+  const options = [`<option value="">${escapeHtml(placeholder)}</option>`]
+    .concat(categorias.map(categoria => `<option value="${escapeHtml(categoria.nome)}">${escapeHtml(categoria.nome)}</option>`));
+  select.innerHTML = options.join('');
+  if (currentValue && categorias.some(categoria => categoria.nome === currentValue)) select.value = currentValue;
+}
+
+async function carregarCategoriasCaixa(options = {}) {
+  const user = requireCaixaUser();
+  if (!user) return [];
+
+  const tipo = options.tipo || caixaTipo?.value || 'ENTRADA';
+  const centroCusto = options.centroCusto || caixaCentroCusto?.value || 'ATELIE';
+  const targetSelect = options.targetSelect || caixaCategoria;
+
+  const { data, error } = await supabaseClient
+    .from('caixa_categorias')
+    .select('id, nome, tipo, centro_custo, user_id')
+    .eq('ativo', true)
+    .eq('tipo', tipo)
+    .eq('centro_custo', centroCusto)
+    .or(`user_id.is.null,user_id.eq.${user.id}`)
+    .order('nome', { ascending: true });
+
+  if (error) throw error;
+  const categorias = data || [];
+  if (!options.targetSelect || targetSelect === caixaCategoria) caixaCategoriasAtuais = categorias;
+  preencherSelectCategoriasCaixa(targetSelect, categorias, categorias.length ? 'Selecione uma categoria' : 'Nenhuma categoria encontrada');
+  return categorias;
+}
+
+async function carregarCategoriasFiltroCaixa() {
+  const user = requireCaixaUser();
+  if (!user || !caixaFiltroCategoria) return [];
+
+  let query = supabaseClient
+    .from('caixa_categorias')
+    .select('id, nome, tipo, centro_custo, user_id')
+    .eq('ativo', true)
+    .or(`user_id.is.null,user_id.eq.${user.id}`)
+    .order('nome', { ascending: true });
+
+  if (caixaFiltroTipo?.value) query = query.eq('tipo', caixaFiltroTipo.value);
+  if (caixaFiltroCentro?.value) query = query.eq('centro_custo', caixaFiltroCentro.value);
+
+  const { data, error } = await query;
+  if (error) throw error;
+
+  const seen = new Set();
+  const categorias = (data || []).filter(categoria => {
+    if (seen.has(categoria.nome)) return false;
+    seen.add(categoria.nome);
+    return true;
+  });
+  preencherSelectCategoriasCaixa(caixaFiltroCategoria, categorias, 'Todas');
+  return categorias;
+}
+
+function getCaixaPayload() {
+  return {
+    user_id: currentUser.id,
+    data_movimento: caixaData?.value || formatDateInputCaixa(),
+    tipo: caixaTipo?.value || 'ENTRADA',
+    centro_custo: caixaCentroCusto?.value || 'ATELIE',
+    categoria: normalizeCaixaText(caixaCategoria?.value),
+    descricao: normalizeCaixaText(caixaDescricao?.value),
+    valor: parseMoneyCaixa(caixaValor?.value),
+    forma_pagamento: caixaFormaPagamento?.value || 'PIX',
+    nome: normalizeCaixaText(caixaNome?.value),
+    observacao: normalizeCaixaText(caixaObservacao?.value)
+  };
+}
+
+function validarPayloadCaixa(payload) {
+  const errors = [];
+  if (!payload.data_movimento) errors.push('Informe a data do lançamento.');
+  if (!payload.categoria) errors.push('Escolha uma categoria.');
+  if (!payload.descricao) errors.push('Informe uma descrição simples.');
+  if (payload.valor <= 0) errors.push('Informe um valor maior que zero.');
+  return errors;
+}
+
+async function criarLancamentoCaixa() {
+  const user = requireCaixaUser();
+  if (!user) return null;
+  const payload = getCaixaPayload();
+  const errors = validarPayloadCaixa(payload);
+  if (errors.length) {
+    setCaixaFeedback(errors.join(' '), 'error');
+    return null;
+  }
+
+  const { data, error } = await supabaseClient
+    .from('caixa_lancamentos')
+    .insert(payload)
+    .select('*')
+    .single();
+
+  if (error) throw error;
+  setCaixaFeedback('Lançamento salvo com sucesso.', 'success');
+  resetarFormularioCaixa();
+  await listarLancamentosCaixa();
+  return data;
+}
+
+async function atualizarLancamentoCaixa() {
+  const user = requireCaixaUser();
+  const lancamentoId = caixaLancamentoId?.value;
+  if (!user || !lancamentoId) return null;
+  const payload = getCaixaPayload();
+  const { user_id: _userId, ...updatePayload } = payload;
+  const errors = validarPayloadCaixa(payload);
+  if (errors.length) {
+    setCaixaFeedback(errors.join(' '), 'error');
+    return null;
+  }
+
+  const { data, error } = await supabaseClient
+    .from('caixa_lancamentos')
+    .update({ ...updatePayload, updated_at: new Date().toISOString() })
+    .eq('id', lancamentoId)
+    .eq('user_id', user.id)
+    .select('*')
+    .single();
+
+  if (error) throw error;
+  setCaixaFeedback('Lançamento atualizado com sucesso.', 'success');
+  resetarFormularioCaixa();
+  await listarLancamentosCaixa();
+  return data;
+}
+
+async function excluirLancamentoCaixa(lancamentoId) {
+  const user = requireCaixaUser();
+  if (!user || !lancamentoId) return;
+  if (!confirm('Excluir este lançamento do Caixa do Ateliê?')) return;
+
+  const { error } = await supabaseClient
+    .from('caixa_lancamentos')
+    .delete()
+    .eq('id', lancamentoId)
+    .eq('user_id', user.id);
+
+  if (error) throw error;
+  setCaixaFeedback('Lançamento excluído.', 'success');
+  await listarLancamentosCaixa();
+}
+
+function getFiltrosCaixa() {
+  return {
+    mes: caixaFiltroMes?.value || '',
+    tipo: caixaFiltroTipo?.value || '',
+    centroCusto: caixaFiltroCentro?.value || '',
+    categoria: caixaFiltroCategoria?.value || '',
+    busca: normalizeCaixaText(caixaFiltroBusca?.value)
+  };
+}
+
+function aplicarFiltrosCaixa(query) {
+  const filtros = getFiltrosCaixa();
+
+  if (filtros.mes) {
+    const [year, month] = filtros.mes.split('-').map(Number);
+    const start = `${filtros.mes}-01`;
+    const nextMonth = new Date(year, month, 1);
+    const end = formatDateInputCaixa(nextMonth);
+    query = query.gte('data_movimento', start).lt('data_movimento', end);
+  }
+  if (filtros.tipo) query = query.eq('tipo', filtros.tipo);
+  if (filtros.centroCusto) query = query.eq('centro_custo', filtros.centroCusto);
+  if (filtros.categoria) query = query.eq('categoria', filtros.categoria);
+  if (filtros.busca) {
+    const term = filtros.busca.replaceAll('%', '').replaceAll(',', ' ');
+    query = query.or(`descricao.ilike.%${term}%,nome.ilike.%${term}%`);
+  }
+
+  return query;
+}
+
+async function listarLancamentosCaixa() {
+  const user = requireCaixaUser();
+  if (!user) return [];
+  if (!caixaLancamentosLista) return [];
+  caixaLancamentosLista.innerHTML = '<tr><td colspan="9">Carregando lançamentos...</td></tr>';
+
+  let query = supabaseClient
+    .from('caixa_lancamentos')
+    .select('*')
+    .eq('user_id', user.id)
+    .order('data_movimento', { ascending: false })
+    .order('created_at', { ascending: false });
+
+  query = aplicarFiltrosCaixa(query);
+  const { data, error } = await query;
+  if (error) throw error;
+
+  caixaLancamentosAtuais = data || [];
+  renderLancamentosCaixa(caixaLancamentosAtuais);
+  calcularResumoCaixa(caixaLancamentosAtuais);
+  return caixaLancamentosAtuais;
+}
+
+function renderLancamentosCaixa(lancamentos) {
+  if (!caixaLancamentosLista) return;
+  if (!lancamentos.length) {
+    caixaLancamentosLista.innerHTML = '<tr><td colspan="9">Nenhum lançamento encontrado neste filtro.</td></tr>';
+    return;
+  }
+
+  caixaLancamentosLista.innerHTML = lancamentos.map(lancamento => `
+    <tr>
+      <td>${formatDateBrCaixa(lancamento.data_movimento)}</td>
+      <td><span class="caixa-badge ${lancamento.tipo === 'ENTRADA' ? 'entrada' : 'saida'}">${traduzirCaixa(lancamento.tipo)}</span></td>
+      <td>${traduzirCaixa(lancamento.centro_custo)}</td>
+      <td>${escapeHtml(lancamento.categoria)}</td>
+      <td>${escapeHtml(lancamento.descricao)}</td>
+      <td class="caixa-valor ${lancamento.tipo === 'ENTRADA' ? 'entrada' : 'saida'}">${moneyFormatter.format(Number(lancamento.valor) || 0)}</td>
+      <td>${escapeHtml(lancamento.forma_pagamento)}</td>
+      <td>${escapeHtml(lancamento.nome || '-')}</td>
+      <td class="caixa-actions-cell">
+        <button class="small-btn caixa-edit" type="button" data-id="${escapeHtml(lancamento.id)}">Editar</button>
+        <button class="small-btn caixa-delete" type="button" data-id="${escapeHtml(lancamento.id)}">Excluir</button>
+      </td>
+    </tr>
+  `).join('');
+}
+
+function renderResumoCardCaixa(value, label, extraClass = '') {
+  return `<article class="result-item caixa-summary-card ${extraClass}"><strong>${escapeHtml(value)}</strong><span>${escapeHtml(label)}</span></article>`;
+}
+
+function calcularResumoCaixa(lancamentos = caixaLancamentosAtuais) {
+  const resumo = lancamentos.reduce((acc, lancamento) => {
+    const valor = Number(lancamento.valor) || 0;
+    if (lancamento.tipo === 'ENTRADA') acc.entradas += valor;
+    if (lancamento.tipo === 'SAIDA') {
+      acc.saidas += valor;
+      acc.gastosPorCategoria[lancamento.categoria] = (acc.gastosPorCategoria[lancamento.categoria] || 0) + valor;
+    }
+    if (lancamento.tipo === 'ENTRADA' && lancamento.centro_custo === 'ATELIE') acc.entradasAtelie += valor;
+    if (lancamento.tipo === 'SAIDA' && lancamento.centro_custo === 'ATELIE') acc.saidasAtelie += valor;
+    if (lancamento.tipo === 'SAIDA' && lancamento.centro_custo === 'PESSOAL') acc.saidasPessoais += valor;
+    return acc;
+  }, {
+    entradas: 0,
+    saidas: 0,
+    entradasAtelie: 0,
+    saidasAtelie: 0,
+    saidasPessoais: 0,
+    gastosPorCategoria: {}
+  });
+
+  resumo.saldo = resumo.entradas - resumo.saidas;
+  const maiorCategoria = Object.entries(resumo.gastosPorCategoria)
+    .sort((a, b) => b[1] - a[1])[0];
+
+  if (caixaResumo) {
+    caixaResumo.innerHTML = [
+      renderResumoCardCaixa(moneyFormatter.format(resumo.entradas), 'Total de entradas', 'entrada'),
+      renderResumoCardCaixa(moneyFormatter.format(resumo.saidas), 'Total de saídas', 'saida'),
+      renderResumoCardCaixa(moneyFormatter.format(resumo.saldo), 'Saldo', resumo.saldo < 0 ? 'saida' : 'entrada'),
+      renderResumoCardCaixa(moneyFormatter.format(resumo.entradasAtelie), 'Entradas do ateliê'),
+      renderResumoCardCaixa(moneyFormatter.format(resumo.saidasAtelie), 'Saídas do ateliê'),
+      renderResumoCardCaixa(moneyFormatter.format(resumo.saidasPessoais), 'Saídas pessoais'),
+      renderResumoCardCaixa(maiorCategoria ? `${maiorCategoria[0]} (${moneyFormatter.format(maiorCategoria[1])})` : 'Sem gastos', 'Maior categoria de gasto')
+    ].join('');
+  }
+
+  const alertas = [];
+  if (resumo.saldo < 0) alertas.push('Atenção: suas saídas passaram das entradas.');
+  if (resumo.saidasPessoais > resumo.saidasAtelie) alertas.push('Atenção: os gastos pessoais estão maiores que os gastos do ateliê neste período.');
+  if (caixaAlertas) caixaAlertas.innerHTML = alertas.map(text => `<div class="alert danger">${escapeHtml(text)}</div>`).join('');
+
+  return { ...resumo, maiorCategoria };
+}
+
+function preencherFormularioEdicaoCaixa(lancamento) {
+  if (!lancamento) return;
+  if (caixaLancamentoId) caixaLancamentoId.value = lancamento.id;
+  if (caixaData) caixaData.value = lancamento.data_movimento || formatDateInputCaixa();
+  if (caixaTipo) caixaTipo.value = lancamento.tipo || 'ENTRADA';
+  if (caixaCentroCusto) caixaCentroCusto.value = lancamento.centro_custo || 'ATELIE';
+  carregarCategoriasCaixa().then(() => {
+    if (caixaCategoria) caixaCategoria.value = lancamento.categoria || '';
+  }).catch(error => {
+    console.error('Erro ao carregar categorias para edição:', error);
+    setCaixaFeedback('Não foi possível carregar a categoria deste lançamento.', 'error');
+  });
+  if (caixaDescricao) caixaDescricao.value = lancamento.descricao || '';
+  if (caixaValor) caixaValor.value = moneyFormatter.format(Number(lancamento.valor) || 0).replace('R$', '').trim();
+  if (caixaFormaPagamento) caixaFormaPagamento.value = lancamento.forma_pagamento || 'PIX';
+  if (caixaNome) caixaNome.value = lancamento.nome || '';
+  if (caixaObservacao) caixaObservacao.value = lancamento.observacao || '';
+  if (caixaSalvarButton) caixaSalvarButton.textContent = 'Salvar alterações';
+  if (caixaCancelarEdicaoButton) caixaCancelarEdicaoButton.classList.remove('hidden');
+  caixaForm?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+}
+
+async function inicializarCaixaAtelie() {
+  if (!caixaForm) return;
+  if (!currentUser) {
+    mostrarCaixaSemUsuario();
+    return;
+  }
+  if (caixaAuthMessage) caixaAuthMessage.textContent = '';
+  if (!caixaData?.value) caixaData.value = formatDateInputCaixa();
+  if (caixaFiltroMes && !caixaFiltroMes.value) caixaFiltroMes.value = formatMonthInputCaixa();
+  await carregarCategoriasCaixa();
+  await carregarCategoriasFiltroCaixa();
+  await listarLancamentosCaixa();
+}
+
 function renderHaveResults(input, result) { /* unchanged simplified */
   if (result.piecesAcross <= 0 || result.totalPieces <= 0) { resultLeadEl.textContent = 'Com essas medidas, essa peça não cabe neste tecido.'; resultsEl.innerHTML = ''; comparisonEl.innerHTML = ''; lastSummary = '✂️ Resumo do corte\n\nEssa peça não coube no tecido informado.'; return; }
   resultLeadEl.innerHTML = `Com essas medidas, cabem <strong>${result.totalPieces} peça(s)</strong> neste tecido.`;
@@ -910,13 +1407,33 @@ function setSimpleMode(mode) {
   if (currentMode === 'simple') setMode('simple');
 }
 
+
+function selecionarModuloPainel(target) {
+  moduleNavButtons.forEach(button => button.classList.toggle('active', button.dataset.moduleTarget === target));
+  if (target === 'sheet') {
+    setMode('sheet');
+    document.querySelector('#calculatorForm')?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+    return;
+  }
+  if (target === 'caixa') {
+    document.querySelector('#caixaAtelieSection')?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+    return;
+  }
+  setMode('project');
+  document.querySelector('#calculatorForm')?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+}
+
 document.querySelector('#mattressType').addEventListener('change', () => {
   const preset = getMattressPreset(document.querySelector('#mattressType').value);
   if (preset) { document.querySelector('#mattressWidth').value = preset.width; document.querySelector('#mattressLength').value = preset.length; }
   calculate();
 });
 
-tabs.forEach(tab=>tab.addEventListener('click',()=>setMode(tab.dataset.mode)));
+tabs.forEach(tab=>tab.addEventListener('click',()=>{
+  setMode(tab.dataset.mode);
+  moduleNavButtons.forEach(button => button.classList.toggle('active', button.dataset.moduleTarget === (tab.dataset.mode === 'sheet' ? 'sheet' : 'calculator')));
+}));
+moduleNavButtons.forEach(button=>button.addEventListener('click',()=>selecionarModuloPainel(button.dataset.moduleTarget)));
 simpleTabs.forEach(tab=>tab.addEventListener('click',()=>setSimpleMode(tab.dataset.simpleMode)));
 document.querySelectorAll('.preset-btn').forEach(button=>button.addEventListener('click',()=>{document.querySelector('#fabricWidth').value=button.dataset.width;calculate();}));
 document.querySelectorAll('.project-preset-btn').forEach(button=>button.addEventListener('click',()=>{document.querySelector('#projectFabricWidth').value=button.dataset.width;calculate();}));
@@ -936,10 +1453,32 @@ if (projectCutsList && typeof projectCutsList.insertAdjacentHTML === 'function')
 if (projectCutsList && typeof projectCutsList.insertAdjacentHTML === 'function' && projectModeSection && document.querySelector('#projectFabricWidth')) setMode('project');
 else calculate();
 
-if (openAuthButton) openAuthButton.addEventListener('click',()=>{ authModal.classList.remove('hidden'); setAuthFeedback('', false); });
-if (closeAuthButton) closeAuthButton.addEventListener('click',()=>closeAuthModal());
-if (loginButton) loginButton.addEventListener('click',()=>{ handleLogin().catch(error=>setAuthFeedback(error.message, true)); });
-if (signupButton) signupButton.addEventListener('click',()=>{ handleSignup().catch(error=>setAuthFeedback(error.message, true)); });
+if (authForm) authForm.addEventListener('submit', event => {
+  event.preventDefault();
+  handleLogin().catch(error => {
+    console.error('Erro completo ao fazer login:', error);
+    setAuthFeedback('Não foi possível entrar. Confira seu e-mail e senha.', true);
+  });
+});
+if (loginButton) loginButton.addEventListener('click', event => {
+  event.preventDefault();
+  handleLogin().catch(error => {
+    console.error('Erro completo ao fazer login:', error);
+    setAuthFeedback('Não foi possível entrar. Confira seu e-mail e senha.', true);
+  });
+});
+if (signupButton) signupButton.addEventListener('click', () => {
+  handleSignup().catch(error => {
+    console.error('Erro completo ao cadastrar:', error);
+    setAuthFeedback('Não foi possível cadastrar. Tente novamente.', true);
+  });
+});
+if (forgotPasswordButton) forgotPasswordButton.addEventListener('click', () => {
+  recuperarSenhaUsuario().catch(error => {
+    console.error('Erro completo ao recuperar senha:', error);
+    setAuthFeedback('Não foi possível enviar o link agora. Tente novamente.', true);
+  });
+});
 if (logoutButton) logoutButton.addEventListener('click',()=>{ handleLogout().catch(error=>setAuthFeedback(error.message, true)); });
 if (saveProjectButton) saveProjectButton.addEventListener('click',()=>{ saveProject().catch(error=>{
   console.error('Erro completo ao salvar Projeto Livre:', error);
@@ -949,6 +1488,66 @@ if (myProjectsList) myProjectsList.addEventListener('click', event => {
   const openButton = event.target.closest?.('.saved-project-open');
   if (!openButton) return;
   savedProjectActions.open(openButton.dataset.projectId);
+});
+
+if (caixaForm) caixaForm.addEventListener('submit', event => {
+  event.preventDefault();
+  const action = caixaLancamentoId?.value ? atualizarLancamentoCaixa : criarLancamentoCaixa;
+  action().catch(error => {
+    console.error('Erro completo ao salvar lançamento do Caixa:', error);
+    setCaixaFeedback('Não foi possível salvar o lançamento. Tente novamente.', 'error');
+  });
+});
+if (caixaTipo) caixaTipo.addEventListener('change', () => {
+  carregarCategoriasCaixa().catch(error => {
+    console.error('Erro ao carregar categorias do Caixa:', error);
+    setCaixaFeedback('Não foi possível carregar as categorias.', 'error');
+  });
+});
+if (caixaCentroCusto) caixaCentroCusto.addEventListener('change', () => {
+  carregarCategoriasCaixa().catch(error => {
+    console.error('Erro ao carregar categorias do Caixa:', error);
+    setCaixaFeedback('Não foi possível carregar as categorias.', 'error');
+  });
+});
+if (caixaCancelarEdicaoButton) caixaCancelarEdicaoButton.addEventListener('click', () => resetarFormularioCaixa());
+if (caixaRefreshButton) caixaRefreshButton.addEventListener('click', () => {
+  inicializarCaixaAtelie().catch(error => {
+    console.error('Erro ao atualizar Caixa do Ateliê:', error);
+    setCaixaFeedback('Não foi possível atualizar o Caixa do Ateliê.', 'error');
+  });
+});
+[caixaFiltroMes, caixaFiltroTipo, caixaFiltroCentro, caixaFiltroCategoria].forEach(field => {
+  if (!field) return;
+  field.addEventListener('change', () => {
+    if (field === caixaFiltroTipo || field === caixaFiltroCentro) {
+      carregarCategoriasFiltroCaixa().catch(error => console.error('Erro ao atualizar categorias do filtro:', error));
+    }
+    listarLancamentosCaixa().catch(error => {
+      console.error('Erro ao aplicar filtros do Caixa:', error);
+      setCaixaFeedback('Não foi possível aplicar os filtros.', 'error');
+    });
+  });
+});
+if (caixaFiltroBusca) caixaFiltroBusca.addEventListener('input', () => {
+  listarLancamentosCaixa().catch(error => {
+    console.error('Erro ao buscar lançamentos do Caixa:', error);
+    setCaixaFeedback('Não foi possível buscar os lançamentos.', 'error');
+  });
+});
+if (caixaLancamentosLista) caixaLancamentosLista.addEventListener('click', event => {
+  const editButton = event.target.closest?.('.caixa-edit');
+  const deleteButton = event.target.closest?.('.caixa-delete');
+  if (editButton) {
+    const lancamento = caixaLancamentosAtuais.find(item => String(item.id) === String(editButton.dataset.id));
+    preencherFormularioEdicaoCaixa(lancamento);
+  }
+  if (deleteButton) {
+    excluirLancamentoCaixa(deleteButton.dataset.id).catch(error => {
+      console.error('Erro completo ao excluir lançamento do Caixa:', error);
+      setCaixaFeedback('Não foi possível excluir o lançamento. Tente novamente.', 'error');
+    });
+  }
 });
 
 initAuth().catch(()=>updateAuthUI());

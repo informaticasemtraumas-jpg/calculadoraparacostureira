@@ -3,21 +3,48 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Calculadora de Corte para Costureiras</title>
+  <title>Calculadora de Corte para Costureiras e Caixa do Ateliê</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <main class="page">
+  <section id="authScreen" class="auth-screen" aria-labelledby="authPanelTitle">
+    <div id="authLoading" class="auth-loading">Carregando...</div>
+    <div id="authCard" class="auth-card hidden">
+      <p class="eyebrow">Painel profissional</p>
+      <h1 id="authPanelTitle">Calculadora de Corte</h1>
+      <p class="auth-subtitle">Acesse seu painel de costura</p>
+      <p class="auth-support">Controle seus cálculos, cortes, lençóis e caixa do ateliê em um só lugar.</p>
+
+      <div id="authFeedback" class="auth-feedback" role="status" aria-live="polite"></div>
+      <form id="authForm" class="auth-form">
+        <label for="authEmail">E-mail</label>
+        <input id="authEmail" type="email" autocomplete="email" required placeholder="voce@email.com" />
+
+        <label for="authPassword">Senha</label>
+        <input id="authPassword" type="password" autocomplete="current-password" required minlength="6" placeholder="Sua senha" />
+
+        <button id="loginButton" class="primary-btn auth-main-button" type="submit">Entrar</button>
+        <button id="signupButton" class="secondary-btn auth-main-button" type="button">Cadastrar</button>
+        <button id="forgotPasswordButton" class="link-btn" type="button">Esqueci minha senha</button>
+      </form>
+    </div>
+  </section>
+
+  <main id="appShell" class="page app-shell hidden" aria-hidden="true">
     <header>
       <div class="auth-bar">
         <div id="authStatus" class="auth-status">Modo visitante</div>
         <div class="auth-actions">
-          <button id="openAuthButton" class="secondary-btn" type="button">Entrar / Criar conta</button>
-          <button id="logoutButton" class="secondary-btn hidden" type="button">Sair</button>
+          <button id="logoutButton" class="secondary-btn" type="button">Sair</button>
         </div>
       </div>
       <h1>Calculadora de Corte para Costureiras</h1>
-      <p>Calcule quantas peças cabem no tecido ou quanto tecido você precisa comprar.</p>
+      <p>Calcule seus cortes e acompanhe o dinheiro que entra e sai do seu ateliê.</p>
+      <nav class="module-nav" aria-label="Módulos do painel">
+        <button class="module-nav-btn active" type="button" data-module-target="calculator">Calculadora de Corte</button>
+        <button class="module-nav-btn" type="button" data-module-target="sheet">Lençol com Elástico</button>
+        <button class="module-nav-btn" type="button" data-module-target="caixa">Caixa do Ateliê</button>
+      </nav>
     </header>
 
     <div class="layout">
@@ -255,33 +282,147 @@
       </aside>
     </div>
 
+    <section id="caixaAtelieSection" class="card caixa-card" aria-labelledby="caixaAtelieTitle">
+      <div class="caixa-header">
+        <div>
+          <p class="eyebrow">Organização simples</p>
+          <h2 id="caixaAtelieTitle">Caixa do Ateliê</h2>
+          <p>Registre entradas e saídas sem complicação, separando o que é do ateliê e o que é pessoal.</p>
+        </div>
+        <button id="caixaRefreshButton" class="secondary-btn" type="button">Atualizar caixa</button>
+      </div>
+
+      <div id="caixaAuthMessage" class="guest-gate" role="status" aria-live="polite"></div>
+      <div id="caixaFeedback" class="save-feedback" role="status" aria-live="polite"></div>
+      <div id="caixaAlertas" class="caixa-alerts" aria-live="polite"></div>
+
+      <form id="caixaForm" class="caixa-form">
+        <input id="caixaLancamentoId" type="hidden" />
+        <div class="grid caixa-form-grid">
+          <div>
+            <label for="caixaData">Data</label>
+            <input id="caixaData" type="date" required />
+          </div>
+          <div>
+            <label for="caixaTipo">Tipo</label>
+            <select id="caixaTipo" required>
+              <option value="ENTRADA">Entrada</option>
+              <option value="SAIDA">Saída</option>
+            </select>
+          </div>
+          <div>
+            <label for="caixaCentroCusto">Centro de custo</label>
+            <select id="caixaCentroCusto" required>
+              <option value="ATELIE">Ateliê</option>
+              <option value="PESSOAL">Pessoal</option>
+            </select>
+          </div>
+          <div>
+            <label for="caixaCategoria">Categoria</label>
+            <select id="caixaCategoria" required>
+              <option value="">Selecione tipo e centro</option>
+            </select>
+          </div>
+          <div>
+            <label for="caixaDescricao">Descrição</label>
+            <input id="caixaDescricao" type="text" placeholder="Ex: Venda de ajuste, tecido, aviamentos" required />
+          </div>
+          <div>
+            <label for="caixaValor">Valor</label>
+            <input id="caixaValor" type="text" inputmode="decimal" placeholder="Ex: 85,90" required />
+          </div>
+          <div>
+            <label for="caixaFormaPagamento">Forma de pagamento</label>
+            <select id="caixaFormaPagamento" required>
+              <option value="PIX">PIX</option>
+              <option value="Dinheiro">Dinheiro</option>
+              <option value="Débito">Débito</option>
+              <option value="Crédito">Crédito</option>
+              <option value="Outro">Outro</option>
+            </select>
+          </div>
+          <div>
+            <label for="caixaNome">Nome</label>
+            <input id="caixaNome" type="text" placeholder="Ex: cliente, fornecedor ou loja" />
+          </div>
+          <div class="caixa-span-2">
+            <label for="caixaObservacao">Observação</label>
+            <textarea id="caixaObservacao" rows="3" placeholder="Algum detalhe que ajude você a lembrar depois"></textarea>
+          </div>
+        </div>
+        <div class="actions">
+          <button id="caixaSalvarButton" class="primary-btn" type="submit">Salvar lançamento</button>
+          <button id="caixaCancelarEdicaoButton" class="secondary-btn hidden" type="button">Cancelar edição</button>
+        </div>
+      </form>
+
+      <section class="caixa-filtros" aria-labelledby="caixaFiltrosTitle">
+        <h3 id="caixaFiltrosTitle">Filtros do período</h3>
+        <div class="grid caixa-filter-grid">
+          <div>
+            <label for="caixaFiltroMes">Mês</label>
+            <input id="caixaFiltroMes" type="month" />
+          </div>
+          <div>
+            <label for="caixaFiltroTipo">Tipo</label>
+            <select id="caixaFiltroTipo">
+              <option value="">Todos</option>
+              <option value="ENTRADA">Entrada</option>
+              <option value="SAIDA">Saída</option>
+            </select>
+          </div>
+          <div>
+            <label for="caixaFiltroCentro">Centro de custo</label>
+            <select id="caixaFiltroCentro">
+              <option value="">Todos</option>
+              <option value="ATELIE">Ateliê</option>
+              <option value="PESSOAL">Pessoal</option>
+            </select>
+          </div>
+          <div>
+            <label for="caixaFiltroCategoria">Categoria</label>
+            <select id="caixaFiltroCategoria">
+              <option value="">Todas</option>
+            </select>
+          </div>
+          <div class="caixa-span-2">
+            <label for="caixaFiltroBusca">Buscar por descrição ou nome</label>
+            <input id="caixaFiltroBusca" type="search" placeholder="Digite uma palavra para encontrar" />
+          </div>
+        </div>
+      </section>
+
+      <div id="caixaResumo" class="caixa-resumo" aria-live="polite"></div>
+
+      <div class="table-wrap caixa-table-wrap">
+        <table class="caixa-table">
+          <thead>
+            <tr>
+              <th>Data</th>
+              <th>Tipo</th>
+              <th>Centro</th>
+              <th>Categoria</th>
+              <th>Descrição</th>
+              <th>Valor</th>
+              <th>Forma</th>
+              <th>Nome</th>
+              <th>Ações</th>
+            </tr>
+          </thead>
+          <tbody id="caixaLancamentosLista">
+            <tr><td colspan="9">Entre na sua conta para usar o Caixa do Ateliê.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+
     <footer>
       Cálculo principal por metro linear. Medidas em centímetros.
     </footer>
   </main>
 
-  <div id="authModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="authModalTitle">
-    <div class="modal-content">
-      <h2 id="authModalTitle">Entrar ou criar conta</h2>
-      <div id="authFeedback" class="help"></div>
-      <form id="authForm">
-        <label for="authName">Nome (apenas no cadastro)</label>
-        <input id="authName" type="text" placeholder="Seu nome" />
 
-        <label for="authEmail">E-mail</label>
-        <input id="authEmail" type="email" required placeholder="voce@email.com" />
-
-        <label for="authPassword">Senha</label>
-        <input id="authPassword" type="password" required minlength="6" placeholder="Mínimo 6 caracteres" />
-
-        <div class="actions">
-          <button id="loginButton" class="primary-btn" type="button">Entrar</button>
-          <button id="signupButton" class="secondary-btn" type="button">Criar conta</button>
-          <button id="closeAuthButton" class="secondary-btn" type="button">Fechar</button>
-        </div>
-      </form>
-    </div>
-  </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="supabase.js"></script>
